@@ -209,5 +209,5 @@ export default function SetDetailPage() {
         .rotate-y-180 { transform: rotateY(180deg); }
       `}</style>
     </div>
-  )
+  ) 
 }
