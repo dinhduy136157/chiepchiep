@@ -44,6 +44,7 @@ export default function DashboardPage() {
   const [studySets, setStudySets] = useState<StudySet[]>([])
   const [groups, setGroups] = useState<Group[]>([])
   const [userName, setUserName] = useState<string>("Duy")
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null) // Thêm lại state này
   const [searchTerm, setSearchTerm] = useState("")
 
   useEffect(() => {
@@ -59,20 +60,47 @@ export default function DashboardPage() {
         return
       }
 
-      // Lấy thông tin user
-      if (user.email) {
+      // Lấy profile (Username & avatar_url)
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('username, avatar_url')
+        .eq('id', user.id)
+        .single()
+
+      if (!cancelled && profile) {
+        setUserName(profile.username || user.email?.split('@')[0] || "Duy")
+        setAvatarUrl(profile.avatar_url)
+      } else if (user.email) {
         setUserName(user.email.split('@')[0] || "Duy")
       }
 
-      // 1. Fetch Study Sets
-      const { data: setRows, error: setLoadError } = await supabase
-        .from('study_sets')
-        .select('id, title, description, created_at')
-        .eq('author_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(5)
+      // --- LOGIC MỚI: FETCH HỌC PHẦN GẦN ĐÂY DỰA TRÊN TIẾN ĐỘ HỌC ---
+      const { data: progressRows, error: setLoadError } = await supabase
+        .from('learning_progress')
+        .select(`
+          cards!inner (
+            study_sets!inner (
+              id, title, description, created_at
+            )
+          )
+        `)
+        .eq('user_id', user.id)
+        .order('last_reviewed', { ascending: false })
 
       if (!cancelled && setLoadError) setError(setLoadError.message)
+      
+      if (!cancelled && progressRows) {
+        // Loại bỏ trùng lặp study_set_id
+        const uniqueSets = new Map();
+        progressRows.forEach((row: any) => {
+          const s = row.cards.study_sets;
+          if (!uniqueSets.has(s.id)) {
+            uniqueSets.set(s.id, s);
+          }
+        });
+        setStudySets(Array.from(uniqueSets.values()).slice(0, 5));
+      }
+      // ---------------------------------------------------------
 
       // 2. Fetch Groups
       const { data: membershipRows, error: membershipError } = await supabase
@@ -102,7 +130,6 @@ export default function DashboardPage() {
       }
 
       if (!cancelled) {
-        setStudySets(setRows ?? [])
         setLoading(false)
       }
     }
@@ -179,8 +206,16 @@ export default function DashboardPage() {
               <button className="p-2 hover:bg-slate-100 rounded-xl transition-colors">
                 <Settings className="w-5 h-5 text-slate-600" />
               </button>
-              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center text-white text-sm font-bold">
-                {userName.charAt(0).toUpperCase()}
+              
+              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center text-white text-sm font-bold overflow-hidden border border-white/20 shadow-sm">
+                <img 
+                  src={avatarUrl ? (avatarUrl.startsWith('http') ? avatarUrl : `/avatars/${avatarUrl}`) : "/avatars/avatar-anh-meo-cute-5.jpg"} 
+                  alt="avatar" 
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = "/avatars/avatar-anh-meo-cute-5.jpg"
+                  }}
+                />
               </div>
             </div>
           </div>
