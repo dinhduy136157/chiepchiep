@@ -36,7 +36,14 @@ export default function GroupDetailPage() {
       if (!user) return
 
       const { data: gData } = await supabase.from('groups').select('*').eq('id', id).single()
-      const { data: mData } = await supabase.from('group_members').select('user_id, role').eq('group_id', id)
+      const { data: mData } = await supabase
+      .from('group_members')
+      .select(`
+        user_id, 
+        role,
+        profiles:user_id ( username ) 
+      `)
+      .eq('group_id', id)
       const { data: msData } = await supabase.from('study_sets').select('*').eq('author_id', user.id)
       
       const { data: ssData } = await supabase
@@ -224,8 +231,8 @@ export default function GroupDetailPage() {
                                 </div>
                                 <div>
                                   <p className="text-sm font-medium text-slate-700">
-                                    {member.user_id.slice(0, 8)}
-                                  </p>
+                                  {member.profiles?.username || member.user_id.slice(0, 8)}
+                                </p>
                                   <p className="text-xs text-slate-400">
                                     {member.role === 'owner' ? 'Trưởng nhóm' : 'Thành viên'}
                                   </p>
