@@ -4,6 +4,7 @@ import { createClient } from '@/utils/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
+import AppHeader from '@/components/AppHeader'
 import { 
   ArrowLeft, 
   Plus, 
@@ -11,10 +12,6 @@ import {
   Save,
   BookOpen,
   Sparkles,
-  GraduationCap,
-  Search,
-  Bell,
-  Settings,
   HelpCircle
 } from 'lucide-react'
 
@@ -108,58 +105,11 @@ export default function CreateSetPage() {
     router.push('/dashboard')
   }
 
-  const logout = async () => {
-    await supabase.auth.signOut()
-    router.push('/auth/login')
-  }
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/30">
-      {/* Top Navigation Bar - Giống dashboard */}
-      <motion.div 
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="sticky top-0 z-10 bg-white/80 backdrop-blur-xl border-b border-slate-200/60"
-      >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-8">
-              <Link href="/dashboard" className="flex items-center gap-2 group">
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center group-hover:scale-105 transition-transform">
-                  <GraduationCap className="w-4 h-4 text-white" />
-                </div>
-                <span className="font-bold text-slate-800 hidden sm:block">FlashLearn</span>
-              </Link>
-              
-              {/* Page Title */}
-              <span className="text-sm font-semibold text-slate-600 hidden sm:block">
-                Tạo học phần mới
-              </span>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <button className="p-2 hover:bg-slate-100 rounded-xl transition-colors relative">
-                <Bell className="w-5 h-5 text-slate-600" />
-                <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-              </button>
-              <button className="p-2 hover:bg-slate-100 rounded-xl transition-colors">
-                <Settings className="w-5 h-5 text-slate-600" />
-              </button>
-              
-              {/* Avatar */}
-              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center text-white text-sm font-bold overflow-hidden border border-white/20 shadow-sm">
-                <img 
-                  src={avatarUrl ? (avatarUrl.startsWith('http') ? avatarUrl : `${avatarUrl}`) : "/avatars/avatar-anh-meo-cute-5.jpg"} 
-                  alt="avatar" 
-                  className="w-full h-full object-cover"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).src = "/avatars/avatar-anh-meo-cute-5.jpg"
-                  }}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
+      {/* Header */}
+      <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}>
+        <AppHeader pageTitle="Tao hoc phan moi" avatarUrl={avatarUrl} userName={userName} />
       </motion.div>
 
       {/* Progress Bar - Thanh tiến độ nhỏ */}
@@ -359,3 +309,7 @@ export default function CreateSetPage() {
     </div>
   )
 }
+
+
+
+

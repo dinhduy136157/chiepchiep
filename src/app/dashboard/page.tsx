@@ -4,10 +4,10 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 import { motion } from 'framer-motion'
+import AppHeader from '@/components/AppHeader'
 import { 
   BookOpen, 
   Users, 
-  LogOut, 
   Plus, 
   ChevronRight,
   Sparkles,
@@ -16,9 +16,7 @@ import {
   User,
   Library,
   GraduationCap,
-  Search,
-  Bell,
-  Settings
+  Search
 } from 'lucide-react'
 
 type StudySet = {
@@ -42,6 +40,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [studySets, setStudySets] = useState<StudySet[]>([])
+  const [allStudySets, setAllStudySets] = useState<StudySet[]>([])
   const [groups, setGroups] = useState<Group[]>([])
   const [userName, setUserName] = useState<string>("Duy")
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null) // Thêm lại state này
@@ -102,6 +101,16 @@ export default function DashboardPage() {
       }
       // ---------------------------------------------------------
 
+      const { data: allSetsRows, error: allSetsError } = await supabase
+        .from('study_sets')
+        .select('id, title, description, created_at')
+        .order('created_at', { ascending: false })
+
+      if (!cancelled) {
+        if (allSetsError) setError(allSetsError.message)
+        setAllStudySets(allSetsRows ?? [])
+      }
+
       // 2. Fetch Groups
       const { data: membershipRows, error: membershipError } = await supabase
         .from('group_members')
@@ -138,16 +147,14 @@ export default function DashboardPage() {
     return () => { cancelled = true }
   }, [router, supabase])
 
-  const logout = async () => {
-    await supabase.auth.signOut()
-    router.push('/auth/login')
-  }
-
-  // Filter study sets based on search
-  const filteredStudySets = studySets.filter(set =>
-    set.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    set.description?.toLowerCase().includes(searchTerm.toLowerCase())
-  )
+  const searchResults = useMemo(() => {
+    const query = searchTerm.trim().toLowerCase()
+    if (!query) return []
+    return allStudySets.filter((set) =>
+      set.title.toLowerCase().includes(query) ||
+      set.description?.toLowerCase().includes(query)
+    )
+  }, [allStudySets, searchTerm])
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -169,57 +176,14 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/30">
-      {/* Top Navigation Bar */}
-      <motion.div 
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="sticky top-0 z-10 bg-white/80 backdrop-blur-xl border-b border-slate-200/60"
-      >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-8">
-              <Link href="/dashboard" className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center">
-                  <GraduationCap className="w-4 h-4 text-white" />
-                </div>
-                <span className="font-bold text-slate-800">FlashLearn</span>
-              </Link>
-              
-              {/* Search Bar */}
-              <div className="hidden md:flex items-center gap-2 bg-slate-100 rounded-xl px-3 py-2 w-64">
-                <Search className="w-4 h-4 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Tìm kiếm học phần..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="bg-transparent border-none outline-none text-sm text-slate-600 w-full placeholder:text-slate-400"
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <button className="p-2 hover:bg-slate-100 rounded-xl transition-colors relative">
-                <Bell className="w-5 h-5 text-slate-600" />
-                <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-              </button>
-              <button className="p-2 hover:bg-slate-100 rounded-xl transition-colors">
-                <Settings className="w-5 h-5 text-slate-600" />
-              </button>
-              
-              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center text-white text-sm font-bold overflow-hidden border border-white/20 shadow-sm">
-                <img 
-                  src={avatarUrl ? (avatarUrl.startsWith('http') ? avatarUrl : `/avatars/${avatarUrl}`) : "/avatars/avatar-anh-meo-cute-5.jpg"} 
-                  alt="avatar" 
-                  className="w-full h-full object-cover"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).src = "/avatars/avatar-anh-meo-cute-5.jpg"
-                  }}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
+      <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}>
+        <AppHeader
+          showSearch
+          searchTerm={searchTerm}
+          onSearchChange={setSearchTerm}
+          avatarUrl={avatarUrl}
+          userName={userName}
+        />
       </motion.div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -259,16 +223,6 @@ export default function DashboardPage() {
                 Tạo học phần
               </Link>
             </motion.div>
-            
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={logout}
-              className="inline-flex items-center gap-2 px-6 py-3 bg-white border border-slate-200 text-slate-600 font-semibold rounded-xl hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-all duration-200"
-            >
-              <LogOut className="w-4 h-4" />
-              Đăng xuất
-            </motion.button>
           </div>
         </motion.div>
 
@@ -296,6 +250,66 @@ export default function DashboardPage() {
           </motion.div>
         )}
 
+        {searchTerm.trim() && (
+          <motion.section
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-10"
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                <Search className="w-5 h-5 text-indigo-600" />
+                Kết quả tìm kiếm
+                <span className="text-sm font-normal text-slate-400 ml-2">
+                  ({searchResults.length})
+                </span>
+              </h2>
+              <button
+                onClick={() => setSearchTerm('')}
+                className="text-sm text-slate-500 hover:text-slate-700"
+              >
+                Xoá tìm kiếm
+              </button>
+            </div>
+
+            {searchResults.length === 0 ? (
+              <div className="bg-white rounded-xl border-2 border-dashed border-slate-200 p-8 text-center">
+                <p className="text-sm text-slate-500">
+                  Không tìm thấy học phần phù hợp.
+                </p>
+              </div>
+            ) : (
+              <div className="grid gap-3 md:grid-cols-2">
+                {searchResults.map((set, index) => (
+                  <motion.div
+                    key={set.id}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.03 }}
+                  >
+                    <Link href={`/dashboard/set/${set.id}`}>
+                      <div className="group bg-white rounded-xl border border-slate-200 p-5 hover:border-indigo-200 hover:shadow-md transition-all duration-200">
+                        <div className="flex justify-between items-start mb-2">
+                          <h3 className="font-semibold text-slate-800 group-hover:text-indigo-600 transition-colors">
+                            {set.title}
+                          </h3>
+                          <span className="text-xs text-slate-400 flex items-center gap-1 bg-slate-50 px-2 py-1 rounded-lg">
+                            <Clock className="w-3 h-3" />
+                            {new Date(set.created_at || '').toLocaleDateString('vi-VN')}
+                          </span>
+                        </div>
+                        <p className="text-sm text-slate-500 line-clamp-2">
+                          {set.description || 'Chưa có mô tả cho học phần này'}
+                        </p>
+                      </div>
+                    </Link>
+                  </motion.div>
+                ))}
+              </div>
+            )}
+          </motion.section>
+        )}
+
         {/* Main Content - Focus on Study Sets and Groups */}
         <div className="grid lg:grid-cols-2 gap-8">
           {/* Study Sets Section - Nổi bật hơn */}
@@ -309,9 +323,9 @@ export default function DashboardPage() {
               <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
                 <Library className="w-6 h-6 text-indigo-600" />
                 Học phần gần đây
-                {filteredStudySets.length > 0 && (
+                {studySets.length > 0 && (
                   <span className="text-sm font-normal text-slate-400 ml-2">
-                    ({filteredStudySets.length})
+                    ({studySets.length})
                   </span>
                 )}
               </h2>
@@ -334,7 +348,7 @@ export default function DashboardPage() {
                     </div>
                   </div>
                 ))
-              ) : filteredStudySets.length === 0 ? (
+              ) : studySets.length === 0 ? (
                 <motion.div 
                   variants={itemVariants}
                   className="bg-white rounded-xl border-2 border-dashed border-slate-200 p-12 text-center"
@@ -355,7 +369,7 @@ export default function DashboardPage() {
                   </Link>
                 </motion.div>
               ) : (
-                filteredStudySets.map((set, index) => (
+                studySets.map((set, index) => (
                   <motion.div
                     key={set.id}
                     variants={itemVariants}
@@ -503,7 +517,7 @@ export default function DashboardPage() {
                 className="mt-4"
               >
                 <Link 
-                  href="/dashboard/groups/create"
+                  href="/dashboard/groups/"
                   className="block w-full p-4 bg-slate-50 rounded-xl border border-slate-200 hover:bg-slate-100 transition-colors text-center text-sm text-slate-600 font-medium"
                 >
                   + Tạo nhóm học tập mới
@@ -523,7 +537,7 @@ export default function DashboardPage() {
           <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl border border-indigo-100 p-4">
             <div className="flex items-center gap-3 text-sm text-slate-600">
               <GraduationCap className="w-5 h-5 text-indigo-600" />
-              <p>✨ <span className="font-medium">Mẹo nhỏ:</span> Học 15 phút mỗi ngày sẽ hiệu quả hơn học 2 tiếng một lần!</p>
+              <p>✨ <span className="font-medium">Ứng dụng được tạo ra để giúp em chiếp chăm học hơn</span></p>
             </div>
           </div>
         </motion.div>

@@ -4,6 +4,8 @@ import { useParams, useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
+import AppHeader from '@/components/AppHeader'
+import { resolveAvatarUrl } from '@/utils/avatar'
 import { 
   BookOpen, 
   Users, 
@@ -16,9 +18,6 @@ import {
   TrendingUp,
   Target,
   Sparkles,
-  GraduationCap,
-  Bell,
-  Settings,
   ArrowLeft
 } from 'lucide-react'
 
@@ -62,7 +61,7 @@ export default function GroupDetailPage() {
         .select(`
           user_id, 
           role,
-          profiles:user_id ( username ) 
+          profiles:user_id ( username, avatar_url ) 
         `)
         .eq('group_id', id)
       const { data: msData } = await supabase.from('study_sets').select('*').eq('author_id', user.id)
@@ -109,51 +108,9 @@ export default function GroupDetailPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/30">
-      {/* Top Navigation Bar - GIỮ NGUYÊN NHƯ DASHBOARD */}
-      <motion.div 
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="sticky top-0 z-10 bg-white/80 backdrop-blur-xl border-b border-slate-200/60"
-      >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-8">
-              <Link href="/dashboard" className="flex items-center gap-2 group">
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center group-hover:scale-105 transition-transform">
-                  <GraduationCap className="w-4 h-4 text-white" />
-                </div>
-                <span className="font-bold text-slate-800 hidden sm:block">FlashLearn</span>
-              </Link>
-              
-              {/* Page Title - NHỎ LẠI */}
-              <span className="text-sm font-medium text-slate-500 hidden sm:block">
-                {group?.name}
-              </span>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <button className="p-2 hover:bg-slate-100 rounded-xl transition-colors relative">
-                <Bell className="w-5 h-5 text-slate-600" />
-                <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-              </button>
-              <button className="p-2 hover:bg-slate-100 rounded-xl transition-colors">
-                <Settings className="w-5 h-5 text-slate-600" />
-              </button>
-              
-              {/* Avatar - DÙNG ĐƯỜNG DẪN Y HỆT */}
-              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center text-white text-sm font-bold overflow-hidden border border-white/20 shadow-sm">
-                <img 
-                  src={avatarUrl ? (avatarUrl.startsWith('http') ? avatarUrl : `${avatarUrl}`) : "/avatars/avatar-anh-meo-cute-5.jpg"} 
-                  alt="avatar" 
-                  className="w-full h-full object-cover"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).src = "/avatars/avatar-anh-meo-cute-5.jpg"
-                  }}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
+      {/* Header */}
+      <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}>
+        <AppHeader pageTitle={group?.name} avatarUrl={avatarUrl} userName={userName} />
       </motion.div>
 
       {/* Progress Bar */}
@@ -298,7 +255,7 @@ export default function GroupDetailPage() {
                                 {/* Avatar của member - DÙNG ĐƯỜNG DẪN Y HỆT */}
                                 <div className="w-6 h-6 rounded-full bg-gradient-to-br from-indigo-100 to-purple-100 overflow-hidden">
                                   <img 
-                                    src={avatarUrl ? (avatarUrl.startsWith('http') ? avatarUrl : `${avatarUrl}`) : "/avatars/avatar-anh-meo-cute-5.jpg"}
+                                    src={resolveAvatarUrl(member.profiles?.avatar_url)}
                                     alt="avatar"
                                     className="w-full h-full object-cover"
                                     onError={(e) => {
@@ -401,3 +358,7 @@ export default function GroupDetailPage() {
     </div>
   )
 }
+
+
+
+

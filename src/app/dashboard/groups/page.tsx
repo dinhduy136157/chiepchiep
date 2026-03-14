@@ -4,16 +4,14 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 import { motion } from 'framer-motion'
+import AppHeader from '@/components/AppHeader'
+import { resolveAvatarUrl } from '@/utils/avatar'
 import { 
   Users, 
   Plus, 
   ChevronRight,
   Crown, 
   User,
-  GraduationCap,
-  Bell,
-  Settings,
-  ArrowLeft,
   Check,
   X
 } from 'lucide-react'
@@ -28,6 +26,7 @@ type Group = {
 type Profile = {
   id: string
   username: string | null
+  avatar_url?: string | null
 }
 
 export default function GroupsPage() {
@@ -79,7 +78,7 @@ export default function GroupsPage() {
 
       const { data: profileRows, error: profileError } = await supabase
         .from('profiles')
-        .select('id, username')
+        .select('id, username, avatar_url')
         .order('username', { ascending: true })
 
       if (!cancelled) {
@@ -197,51 +196,9 @@ export default function GroupsPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/30">
-      {/* Top Navigation Bar - GIỐNG DASHBOARD */}
-      <motion.div 
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="sticky top-0 z-10 bg-white/80 backdrop-blur-xl border-b border-slate-200/60"
-      >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-8">
-              <Link href="/dashboard" className="flex items-center gap-2 group">
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center group-hover:scale-105 transition-transform">
-                  <GraduationCap className="w-4 h-4 text-white" />
-                </div>
-                <span className="font-bold text-slate-800 hidden sm:block">FlashLearn</span>
-              </Link>
-              
-              {/* Page Title */}
-              <span className="text-sm font-medium text-slate-500 hidden sm:block">
-                Quản lý nhóm học tập
-              </span>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <button className="p-2 hover:bg-slate-100 rounded-xl transition-colors relative">
-                <Bell className="w-5 h-5 text-slate-600" />
-                <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-              </button>
-              <button className="p-2 hover:bg-slate-100 rounded-xl transition-colors">
-                <Settings className="w-5 h-5 text-slate-600" />
-              </button>
-              
-              {/* Avatar */}
-              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center text-white text-sm font-bold overflow-hidden border border-white/20 shadow-sm">
-                <img 
-                  src={avatarUrl ? (avatarUrl.startsWith('http') ? avatarUrl : `${avatarUrl}`) : "/avatars/avatar-anh-meo-cute-5.jpg"} 
-                  alt="avatar" 
-                  className="w-full h-full object-cover"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).src = "/avatars/avatar-anh-meo-cute-5.jpg"
-                  }}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
+      {/* Header */}
+      <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}>
+        <AppHeader pageTitle="Quan ly nhom hoc tap" avatarUrl={avatarUrl} userName={userName} />
       </motion.div>
 
       {/* Progress Bar */}
@@ -341,7 +298,7 @@ export default function GroupsPage() {
                             {/* Avatar nhỏ cho member */}
                             <div className="w-6 h-6 rounded-full bg-gradient-to-br from-indigo-100 to-purple-100 overflow-hidden">
                               <img 
-                                src="/avatars/avatar-anh-meo-cute-5.jpg"
+                                src={resolveAvatarUrl(profile.avatar_url)}
                                 alt="avatar"
                                 className="w-full h-full object-cover"
                                 onError={(e) => {
@@ -485,3 +442,4 @@ export default function GroupsPage() {
     </div>
   )
 }
+
