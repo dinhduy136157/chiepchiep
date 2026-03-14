@@ -10,63 +10,73 @@ import {
   FileText, LayoutGrid, Zap, Gamepad2, Volume2, FileDown, Crown
 } from 'lucide-react'
 
-// --- COMPONENT CON XỬ LÝ VUỐT THẺ KIỂU QUIZLET ---
+// --- COMPONENT CON TỐI ƯU TRƯỢT SIÊU NHẠY CHO MOBILE ---
 function SwipeableCard({ card, isFlipped, setIsFlipped, onSwipe }: any) {
   const x = useMotionValue(0);
   
-  // Hiệu ứng nghiêng thẻ và làm mờ khi kéo
-  const rotate = useTransform(x, [-200, 200], [-25, 25]);
-  const opacity = useTransform(x, [-250, -150, 0, 150, 250], [0, 1, 1, 1, 0]);
+  // Nghiêng thẻ nhẹ nhàng hơn để không bị lỗi hiển thị trên màn hình hẹp
+  const rotate = useTransform(x, [-150, 150], [-15, 15]);
   
-  // Hiệu ứng hiện label "HỌC LẠI" và "ĐÃ BIẾT"
-  const họcLạiOpacity = useTransform(x, [-120, -40], [1, 0]);
-  const đãBiếtOpacity = useTransform(x, [40, 120], [0, 1]);
+  // Opacity biến mất nhanh hơn khi thẻ bay ra khỏi tâm
+  const opacity = useTransform(x, [-200, -120, 0, 120, 200], [0, 1, 1, 1, 0]);
+  
+  // Label hiện cực sớm (chỉ cần nhích 20px là bắt đầu thấy chữ)
+  const họcLạiOpacity = useTransform(x, [-60, -20], [1, 0]);
+  const đãBiếtOpacity = useTransform(x, [20, 60], [0, 1]);
 
   return (
     <motion.div
       style={{ x, rotate, opacity, touchAction: 'none' }}
       drag="x"
       dragConstraints={{ left: 0, right: 0 }}
+      dragElastic={0.9} // Tăng độ co giãn để kéo cảm giác nhẹ tay hơn
       onDragEnd={(_, info) => {
-        if (info.offset.x > 120) onSwipe(1); // Sang phải
-        else if (info.offset.x < -120) onSwipe(-1); // Sang trái
+        const offset = info.offset.x;
+        const velocity = info.velocity.x;
+
+        // NGƯỠNG SIÊU THẤP: Kéo quá 50px hoặc phẩy tay nhanh (>400) là tính luôn
+        if (offset > 50 || velocity > 400) {
+          onSwipe(1); // Sang phải -> Đã biết
+        } else if (offset < -50 || velocity < -400) {
+          onSwipe(-1); // Sang trái -> Học lại
+        }
       }}
-      onClick={(e) => {
-        // Chỉ lật nếu người dùng click chứ không phải đang drag
+      onClick={() => {
+        // Chỉ lật thẻ nếu người dùng chạm nhẹ (không phải đang kéo)
         if (Math.abs(x.get()) < 5) setIsFlipped(!isFlipped);
       }}
       className="absolute inset-0 cursor-grab active:cursor-grabbing preserve-3d"
     >
-      {/* Label HỌC LẠI (Hiện khi kéo sang trái) */}
+      {/* Label HỌC LẠI (ĐỎ) */}
       <motion.div 
         style={{ opacity: họcLạiOpacity }} 
-        className="absolute top-10 right-10 z-50 border-4 border-red-500 text-red-500 font-black px-6 py-2 rounded-2xl rotate-12 text-2xl pointer-events-none shadow-lg bg-white/90"
+        className="absolute top-10 right-8 z-50 border-[3px] border-red-500 text-red-500 font-black px-4 py-1.5 rounded-xl rotate-12 text-lg pointer-events-none bg-white/90 shadow-sm"
       >
         HỌC LẠI
       </motion.div>
 
-      {/* Label ĐÃ BIẾT (Hiện khi kéo sang phải) */}
+      {/* Label ĐÃ BIẾT (XANH) */}
       <motion.div 
         style={{ opacity: đãBiếtOpacity }} 
-        className="absolute top-10 left-10 z-50 border-4 border-emerald-500 text-emerald-500 font-black px-6 py-2 rounded-2xl -rotate-12 text-2xl pointer-events-none shadow-lg bg-white/90"
+        className="absolute top-10 left-8 z-50 border-[3px] border-emerald-500 text-emerald-500 font-black px-4 py-1.5 rounded-xl -rotate-12 text-lg pointer-events-none bg-white/90 shadow-sm"
       >
         ĐÃ BIẾT
       </motion.div>
 
       <motion.div 
-        className="w-full h-full preserve-3d" 
+        className="w-full h-full preserve-3d shadow-xl rounded-[2.5rem]" 
         animate={{ rotateY: isFlipped ? 180 : 0 }} 
-        transition={{ duration: 0.4, type: "spring", stiffness: 260, damping: 20 }}
+        transition={{ duration: 0.35, type: "spring", stiffness: 300, damping: 25 }}
       >
-        {/* Mặt trước */}
-        <div className="absolute inset-0 backface-hidden bg-white rounded-[3rem] border-4 border-slate-100 p-12 flex items-center justify-center text-4xl md:text-5xl font-black text-slate-800 text-center leading-tight shadow-xl">
+        {/* Front */}
+        <div className="absolute inset-0 backface-hidden bg-white rounded-[2.5rem] border-2 border-slate-100 p-8 flex items-center justify-center text-3xl md:text-5xl font-black text-slate-800 text-center leading-tight">
           {card.term}
-          <div className="absolute top-8 left-10 text-[10px] font-black uppercase text-slate-300 tracking-widest">Front</div>
+          <div className="absolute top-6 left-8 text-[9px] font-black uppercase text-slate-300 tracking-widest">Front</div>
         </div>
-        {/* Mặt sau */}
-        <div className="absolute inset-0 backface-hidden bg-emerald-600 rounded-[3rem] rotate-y-180 p-12 flex items-center justify-center text-2xl md:text-3xl text-white text-center leading-relaxed font-bold italic shadow-xl">
+        {/* Back */}
+        <div className="absolute inset-0 backface-hidden bg-emerald-600 rounded-[2.5rem] rotate-y-180 p-8 flex items-center justify-center text-xl md:text-3xl text-white text-center leading-relaxed font-bold italic">
           {card.definition}
-          <div className="absolute top-8 left-10 text-[10px] font-black uppercase text-emerald-200 tracking-widest">Back</div>
+          <div className="absolute top-6 left-8 text-[9px] font-black uppercase text-emerald-200 tracking-widest">Back</div>
         </div>
       </motion.div>
     </motion.div>
