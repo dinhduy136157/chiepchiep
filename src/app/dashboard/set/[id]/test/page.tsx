@@ -76,7 +76,7 @@ export default function TestPage() {
   if (cards.length === 0) return <div className="p-20 text-center font-bold text-emerald-600">Đang khởi tạo bài thi...</div>
 
   if (isFinished) return (
-    <div className="min-h-screen bg-[#f6f7fb] flex items-center justify-center p-6">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/30 flex items-center justify-center p-6">
       <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white p-12 rounded-[3rem] shadow-2xl text-center max-w-md w-full border border-emerald-100">
         <Trophy className="w-20 h-20 text-amber-400 mx-auto mb-6" />
         <h2 className="text-3xl font-black text-slate-800 mb-2">Hoàn thành!</h2>
@@ -88,7 +88,7 @@ export default function TestPage() {
   )
 
   return (
-    <div className="min-h-screen bg-[#f6f7fb] p-6 flex flex-col items-center">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/30 p-6 flex flex-col items-center">
       <div className="w-full max-w-2xl flex justify-between items-center mb-8">
         <button onClick={() => router.back()} className="text-slate-400 font-bold flex items-center gap-2">← Thoát</button>
         <div className="h-2 flex-1 mx-10 bg-slate-200 rounded-full overflow-hidden">

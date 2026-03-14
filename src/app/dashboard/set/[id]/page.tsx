@@ -3,12 +3,75 @@ import { useEffect, useState, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 import Link from 'next/link'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, useMotionValue, useTransform } from 'framer-motion'
 import { 
   ChevronLeft, ChevronRight, Check, BookOpen, RotateCw, 
   ArrowLeft, Plus, Send, X, PlusCircle, Brain, 
-  FileText, LayoutGrid, Zap, Gamepad2, Volume2, FileDown
+  FileText, LayoutGrid, Zap, Gamepad2, Volume2, FileDown, Crown
 } from 'lucide-react'
+
+// --- COMPONENT CON XỬ LÝ VUỐT THẺ KIỂU QUIZLET ---
+function SwipeableCard({ card, isFlipped, setIsFlipped, onSwipe }: any) {
+  const x = useMotionValue(0);
+  
+  // Hiệu ứng nghiêng thẻ và làm mờ khi kéo
+  const rotate = useTransform(x, [-200, 200], [-25, 25]);
+  const opacity = useTransform(x, [-250, -150, 0, 150, 250], [0, 1, 1, 1, 0]);
+  
+  // Hiệu ứng hiện label "HỌC LẠI" và "ĐÃ BIẾT"
+  const họcLạiOpacity = useTransform(x, [-120, -40], [1, 0]);
+  const đãBiếtOpacity = useTransform(x, [40, 120], [0, 1]);
+
+  return (
+    <motion.div
+      style={{ x, rotate, opacity, touchAction: 'none' }}
+      drag="x"
+      dragConstraints={{ left: 0, right: 0 }}
+      onDragEnd={(_, info) => {
+        if (info.offset.x > 120) onSwipe(1); // Sang phải
+        else if (info.offset.x < -120) onSwipe(-1); // Sang trái
+      }}
+      onClick={(e) => {
+        // Chỉ lật nếu người dùng click chứ không phải đang drag
+        if (Math.abs(x.get()) < 5) setIsFlipped(!isFlipped);
+      }}
+      className="absolute inset-0 cursor-grab active:cursor-grabbing preserve-3d"
+    >
+      {/* Label HỌC LẠI (Hiện khi kéo sang trái) */}
+      <motion.div 
+        style={{ opacity: họcLạiOpacity }} 
+        className="absolute top-10 right-10 z-50 border-4 border-red-500 text-red-500 font-black px-6 py-2 rounded-2xl rotate-12 text-2xl pointer-events-none shadow-lg bg-white/90"
+      >
+        HỌC LẠI
+      </motion.div>
+
+      {/* Label ĐÃ BIẾT (Hiện khi kéo sang phải) */}
+      <motion.div 
+        style={{ opacity: đãBiếtOpacity }} 
+        className="absolute top-10 left-10 z-50 border-4 border-emerald-500 text-emerald-500 font-black px-6 py-2 rounded-2xl -rotate-12 text-2xl pointer-events-none shadow-lg bg-white/90"
+      >
+        ĐÃ BIẾT
+      </motion.div>
+
+      <motion.div 
+        className="w-full h-full preserve-3d" 
+        animate={{ rotateY: isFlipped ? 180 : 0 }} 
+        transition={{ duration: 0.4, type: "spring", stiffness: 260, damping: 20 }}
+      >
+        {/* Mặt trước */}
+        <div className="absolute inset-0 backface-hidden bg-white rounded-[3rem] border-4 border-slate-100 p-12 flex items-center justify-center text-4xl md:text-5xl font-black text-slate-800 text-center leading-tight shadow-xl">
+          {card.term}
+          <div className="absolute top-8 left-10 text-[10px] font-black uppercase text-slate-300 tracking-widest">Front</div>
+        </div>
+        {/* Mặt sau */}
+        <div className="absolute inset-0 backface-hidden bg-emerald-600 rounded-[3rem] rotate-y-180 p-12 flex items-center justify-center text-2xl md:text-3xl text-white text-center leading-relaxed font-bold italic shadow-xl">
+          {card.definition}
+          <div className="absolute top-8 left-10 text-[10px] font-black uppercase text-emerald-200 tracking-widest">Back</div>
+        </div>
+      </motion.div>
+    </motion.div>
+  )
+}
 
 export default function SetDetailPage() {
   const { id } = useParams()
@@ -24,15 +87,14 @@ export default function SetDetailPage() {
   const [currentIndex, setCurrentIndex] = useState(0)
   const [isFlipped, setIsFlipped] = useState(false)
   const [activeTab, setActiveTab] = useState('flashcards')
+  const isDraggingRef = useRef(false)
 
-  // States cho tính năng Thêm thẻ
   const [isAdding, setIsAdding] = useState(false)
   const [newTerm, setNewTerm] = useState('')
   const [newDefinition, setNewDefinition] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
 
-  // States cho Nhập hàng loạt (Bulk Import)
   const [showBulkModal, setShowBulkModal] = useState(false)
   const [bulkText, setBulkText] = useState('')
 
@@ -67,11 +129,9 @@ export default function SetDetailPage() {
     setIsSubmitting(false)
   }
 
-  // Logic Nhập hàng loạt
   const handleBulkImport = async () => {
     if (!bulkText.trim()) return
     setIsSubmitting(true)
-
     const lines = bulkText.split('\n')
     const newCards = lines
       .map(line => {
@@ -109,7 +169,7 @@ export default function SetDetailPage() {
   if (loading) return <div className="min-h-screen flex items-center justify-center font-bold text-emerald-600 animate-pulse uppercase italic tracking-tighter">Đang nạp dữ liệu...</div>
 
   return (
-    <div className="min-h-screen bg-[#f6f7fb] pb-20 font-sans">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/30 pb-20 font-sans">
       <nav className="sticky top-0 z-20 bg-white/80 backdrop-blur-md border-b border-slate-200 px-6 py-4">
         <div className="max-w-6xl mx-auto flex justify-between items-center">
           <Link href="/dashboard" className="flex items-center gap-2 text-sm text-slate-500 hover:text-emerald-600 font-bold transition-all">
@@ -117,7 +177,7 @@ export default function SetDetailPage() {
           </Link>
           <div className="flex gap-2">
             <button onClick={() => setShowBulkModal(true)} className="hidden md:flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-600 rounded-full text-xs font-bold hover:bg-slate-200 transition-all">
-              <FileDown className="w-3 h-3" /> Thêm thẻ hàng loạt
+              <FileDown className="w-3 h-3" /> Thêm hàng loạt
             </button>
             <button onClick={() => {setIsAdding(true); setTimeout(() => bottomRef.current?.scrollIntoView({behavior:'smooth'}), 100)}} className="bg-emerald-600 text-white px-4 py-2 rounded-full text-xs font-bold hover:bg-emerald-700 transition flex items-center gap-1 shadow-lg shadow-emerald-100">
               <Plus className="w-3 h-3" /> Thêm thẻ
@@ -143,28 +203,38 @@ export default function SetDetailPage() {
           <ModeButton icon={<Gamepad2 className="w-5 h-5" />} label="Game" color="text-purple-500" bg="bg-purple-50" />
         </div>
 
-        {/* 3D FLASHCARD AREA */}
+        {/* 3D FLASHCARD AREA - ĐÃ CẬP NHẬT TRƯỢT KIỂU QUIZLET */}
         {activeTab === 'flashcards' && cards.length > 0 && (
           <div className="mb-20">
             <div className="flex items-center justify-between mb-4 px-1">
               <span className="text-sm font-bold text-slate-400 italic">Thẻ {currentIndex + 1} / {cards.length}</span>
               <button onClick={() => {setCurrentIndex(Math.floor(Math.random() * cards.length)); setIsFlipped(false)}} className="text-sm font-bold text-emerald-600 flex items-center gap-1 hover:bg-emerald-50 px-3 py-1 rounded-lg transition"><RotateCw className="w-3 h-3" /> Xáo trộn</button>
             </div>
-            <motion.div className="relative h-72 md:h-[420px] perspective-1000 cursor-pointer" onClick={() => setIsFlipped(!isFlipped)}>
-              <motion.div className="w-full h-full preserve-3d shadow-xl rounded-[3rem]" animate={{ rotateY: isFlipped ? 180 : 0 }} transition={{ duration: 0.4, type: "spring", stiffness: 260, damping: 20 }}>
-                <div className="absolute inset-0 backface-hidden bg-white rounded-[3rem] border border-slate-100 p-12 flex items-center justify-center text-4xl md:text-5xl font-black text-slate-800 text-center leading-tight">
-                  {cards[currentIndex].term}
-                  <div className="absolute top-8 left-10 text-[10px] font-black uppercase text-slate-300 tracking-widest">Front</div>
-                </div>
-                <div className="absolute inset-0 backface-hidden bg-emerald-600 rounded-[3rem] rotate-y-180 p-12 flex items-center justify-center text-2xl md:text-3xl text-white text-center leading-relaxed font-bold italic">
-                  {cards[currentIndex].definition}
-                </div>
-              </motion.div>
-            </motion.div>
+
+            <div className="relative h-72 md:h-[420px] perspective-1000">
+              <AnimatePresence mode="wait">
+                <SwipeableCard
+                  key={currentIndex}
+                  card={cards[currentIndex]}
+                  isFlipped={isFlipped}
+                  setIsFlipped={setIsFlipped}
+                  onSwipe={(dir: number) => {
+                    // Nếu vuốt phải (1) -> Đánh dấu đã học
+                    if (dir === 1 && !masteredIds.has(cards[currentIndex].id)) {
+                      toggleMastered(cards[currentIndex].id);
+                    }
+                    // Chuyển thẻ tiếp theo
+                    setCurrentIndex((prev) => (prev + 1) % cards.length);
+                    setIsFlipped(false);
+                  }}
+                />
+              </AnimatePresence>
+            </div>
+
             <div className="flex items-center justify-center gap-8 mt-10">
-              <button onClick={() => {setIsFlipped(false); setCurrentIndex((prev) => (prev - 1 + cards.length) % cards.length)}} className="w-14 h-14 rounded-full bg-white shadow-md flex items-center justify-center hover:bg-emerald-50 transition-all border border-slate-100">←</button>
+              <button onClick={() => {setIsFlipped(false); setCurrentIndex((prev) => (prev - 1 + cards.length) % cards.length)}} className="w-14 h-14 rounded-full bg-white shadow-md flex items-center justify-center hover:bg-emerald-50 transition-all border border-slate-100 font-bold text-slate-400">←</button>
               <button onClick={(e) => { e.stopPropagation(); toggleMastered(cards[currentIndex].id) }} className={`w-16 h-16 rounded-full flex items-center justify-center transition-all shadow-xl ${masteredIds.has(cards[currentIndex].id) ? 'bg-emerald-500 text-white shadow-emerald-200' : 'bg-white border-2 border-slate-200 text-slate-300 hover:text-emerald-500'}`}><Check className="w-8 h-8" /></button>
-              <button onClick={() => {setIsFlipped(false); setCurrentIndex((prev) => (prev + 1) % cards.length)}} className="w-14 h-14 rounded-full bg-white shadow-md flex items-center justify-center hover:bg-emerald-50 transition-all border border-slate-100">→</button>
+              <button onClick={() => {setIsFlipped(false); setCurrentIndex((prev) => (prev + 1) % cards.length)}} className="w-14 h-14 rounded-full bg-white shadow-md flex items-center justify-center hover:bg-emerald-50 transition-all border border-slate-100 font-bold text-slate-400">→</button>
             </div>
           </div>
         )}
@@ -219,7 +289,6 @@ export default function SetDetailPage() {
         </section>
       </main>
 
-      {/* BULK IMPORT MODAL */}
       <AnimatePresence>
         {showBulkModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -229,13 +298,7 @@ export default function SetDetailPage() {
                 <h3 className="text-2xl font-black italic tracking-tighter uppercase">Nhập hàng loạt 🚀</h3>
                 <button onClick={() => setShowBulkModal(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><X /></button>
               </div>
-              <div className="bg-amber-50 border border-amber-100 p-5 rounded-2xl mb-6 text-[11px] text-amber-800 leading-relaxed font-medium">
-                <p className="font-black uppercase mb-2">HƯỚNG DẪN:</p>
-                <p>Mỗi dòng là một từ mới. Phân tách bằng dấu phẩy (,).<br/>
-                Ví dụ: <span className="font-bold">Meticulous, Tỉ mỉ kỹ lưỡng</span><br/>
-                <span className="font-bold">Resilient, Khả năng phục hồi</span></p>
-              </div>
-              <textarea value={bulkText} onChange={(e) => setBulkText(e.target.value)} placeholder="Dán danh sách từ vựng của Duy vào đây..." className="w-full h-72 p-6 bg-slate-50 border border-slate-100 rounded-[2rem] outline-none focus:ring-2 ring-emerald-100 transition-all font-bold text-sm resize-none mb-8" />
+              <textarea value={bulkText} onChange={(e) => setBulkText(e.target.value)} placeholder="Dán danh sách từ vựng vào đây..." className="w-full h-72 p-6 bg-slate-50 border border-slate-100 rounded-[2rem] outline-none focus:ring-2 ring-emerald-100 transition-all font-bold text-sm resize-none mb-8" />
               <button onClick={handleBulkImport} disabled={isSubmitting || !bulkText.trim()} className="w-full py-5 bg-emerald-600 text-white font-black rounded-2xl shadow-xl hover:bg-slate-900 transition-all uppercase tracking-widest disabled:bg-slate-100">
                 {isSubmitting ? 'ĐANG XỬ LÝ...' : 'XÁC NHẬN NHẬP DỮ LIỆU'}
               </button>

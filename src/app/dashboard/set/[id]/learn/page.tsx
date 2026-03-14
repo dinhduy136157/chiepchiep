@@ -56,7 +56,7 @@ export default function LearnPage() {
   if (cards.length === 0) return <div className="p-20 text-center">Đang chuẩn bị bài học...</div>
 
   return (
-    <div className="min-h-screen bg-[#f6f7fb] flex flex-col items-center p-6">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/30 flex flex-col items-center p-6">
       <div className="w-full max-w-2xl flex justify-between items-center mb-10">
         <button onClick={() => router.back()} className="flex items-center gap-2 text-slate-500 font-bold"><ArrowLeft /> Thoát</button>
         <div className="text-sm font-black text-slate-400">TIẾN ĐỘ: {currentIndex + 1} / {cards.length}</div>

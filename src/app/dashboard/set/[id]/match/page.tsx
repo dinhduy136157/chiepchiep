@@ -79,7 +79,7 @@ export default function MatchGamePage() {
   )
 
   return (
-    <div className="min-h-screen bg-[#f0f2f5] p-6 flex flex-col items-center">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/30 p-6 flex flex-col items-center">
       <div className="w-full max-w-4xl flex justify-between items-center mb-10">
         <button onClick={() => router.back()} className="flex items-center gap-2 text-slate-500 font-black text-sm uppercase tracking-widest hover:text-emerald-600 transition-colors">
           <ArrowLeft className="w-4 h-4" /> Thoát
