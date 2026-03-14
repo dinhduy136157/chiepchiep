@@ -10,44 +10,42 @@ import {
   FileText, LayoutGrid, Zap, Gamepad2, Volume2, FileDown, Crown
 } from 'lucide-react'
 
-// --- COMPONENT CON TỐI ƯU TRƯỢT SIÊU NHẠY CHO MOBILE ---
+// --- COMPONENT CON TỐI ƯU TRƯỢT MƯỢT MÀ CHẬM RÃI ---
 function SwipeableCard({ card, isFlipped, setIsFlipped, onSwipe }: any) {
   const x = useMotionValue(0);
   
-  // Nghiêng thẻ nhẹ nhàng hơn để không bị lỗi hiển thị trên màn hình hẹp
+  // Nghiêng thẻ nhẹ nhàng hơn
   const rotate = useTransform(x, [-150, 150], [-15, 15]);
   
-  // Opacity biến mất nhanh hơn khi thẻ bay ra khỏi tâm
-  const opacity = useTransform(x, [-200, -120, 0, 120, 200], [0, 1, 1, 1, 0]);
+  // Opacity mượt hơn khi bay ra xa
+  const opacity = useTransform(x, [-250, -150, 0, 150, 250], [0, 1, 1, 1, 0]);
   
-  // Label hiện cực sớm (chỉ cần nhích 20px là bắt đầu thấy chữ)
-  const họcLạiOpacity = useTransform(x, [-60, -20], [1, 0]);
-  const đãBiếtOpacity = useTransform(x, [20, 60], [0, 1]);
+  const họcLạiOpacity = useTransform(x, [-80, -30], [1, 0]);
+  const đãBiếtOpacity = useTransform(x, [30, 80], [0, 1]);
 
   return (
     <motion.div
       style={{ x, rotate, opacity, touchAction: 'none' }}
       drag="x"
       dragConstraints={{ left: 0, right: 0 }}
-      dragElastic={0.9} // Tăng độ co giãn để kéo cảm giác nhẹ tay hơn
+      dragElastic={0.7} 
       onDragEnd={(_, info) => {
         const offset = info.offset.x;
         const velocity = info.velocity.x;
 
-        // NGƯỠNG SIÊU THẤP: Kéo quá 50px hoặc phẩy tay nhanh (>400) là tính luôn
+        // Giữ nguyên ngưỡng nhạy nhưng xử lý chuyển cảnh chậm lại ở component cha
         if (offset > 50 || velocity > 400) {
-          onSwipe(1); // Sang phải -> Đã biết
+          onSwipe(1); 
         } else if (offset < -50 || velocity < -400) {
-          onSwipe(-1); // Sang trái -> Học lại
+          onSwipe(-1); 
         }
       }}
       onClick={() => {
-        // Chỉ lật thẻ nếu người dùng chạm nhẹ (không phải đang kéo)
         if (Math.abs(x.get()) < 5) setIsFlipped(!isFlipped);
       }}
       className="absolute inset-0 cursor-grab active:cursor-grabbing preserve-3d"
     >
-      {/* Label HỌC LẠI (ĐỎ) */}
+      {/* Label HỌC LẠI */}
       <motion.div 
         style={{ opacity: họcLạiOpacity }} 
         className="absolute top-10 right-8 z-50 border-[3px] border-red-500 text-red-500 font-black px-4 py-1.5 rounded-xl rotate-12 text-lg pointer-events-none bg-white/90 shadow-sm"
@@ -55,7 +53,7 @@ function SwipeableCard({ card, isFlipped, setIsFlipped, onSwipe }: any) {
         HỌC LẠI
       </motion.div>
 
-      {/* Label ĐÃ BIẾT (XANH) */}
+      {/* Label ĐÃ BIẾT */}
       <motion.div 
         style={{ opacity: đãBiếtOpacity }} 
         className="absolute top-10 left-8 z-50 border-[3px] border-emerald-500 text-emerald-500 font-black px-4 py-1.5 rounded-xl -rotate-12 text-lg pointer-events-none bg-white/90 shadow-sm"
@@ -66,14 +64,13 @@ function SwipeableCard({ card, isFlipped, setIsFlipped, onSwipe }: any) {
       <motion.div 
         className="w-full h-full preserve-3d shadow-xl rounded-[2.5rem]" 
         animate={{ rotateY: isFlipped ? 180 : 0 }} 
-        transition={{ duration: 0.35, type: "spring", stiffness: 300, damping: 25 }}
+        // CHỈNH Ở ĐÂY: stiffness thấp hơn (300 -> 150) và damping cao hơn (25 -> 30) để chậm lại
+        transition={{ duration: 0.5, type: "spring", stiffness: 150, damping: 30 }}
       >
-        {/* Front */}
         <div className="absolute inset-0 backface-hidden bg-white rounded-[2.5rem] border-2 border-slate-100 p-8 flex items-center justify-center text-3xl md:text-5xl font-black text-slate-800 text-center leading-tight">
           {card.term}
           <div className="absolute top-6 left-8 text-[9px] font-black uppercase text-slate-300 tracking-widest">Front</div>
         </div>
-        {/* Back */}
         <div className="absolute inset-0 backface-hidden bg-emerald-600 rounded-[2.5rem] rotate-y-180 p-8 flex items-center justify-center text-xl md:text-3xl text-white text-center leading-relaxed font-bold italic">
           {card.definition}
           <div className="absolute top-6 left-8 text-[9px] font-black uppercase text-emerald-200 tracking-widest">Back</div>
@@ -201,7 +198,7 @@ export default function SetDetailPage() {
       <main className="max-w-5xl mx-auto px-6 py-10">
         <div className="mb-8">
           <h1 className="text-4xl font-black text-slate-800 tracking-tight">{title}</h1>
-          <p className="text-slate-500 mt-2 font-medium">{description || "Học tập hiệu quả mỗi ngày cùng Chiep Chiep 🐣"}</p>
+          <p className="text-slate-500 mt-2 font-medium">{description || "Học tập hiệu quả mỗi ngày cùng em Chiep 🐣"}</p>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-12">
@@ -213,7 +210,6 @@ export default function SetDetailPage() {
           <ModeButton icon={<Gamepad2 className="w-5 h-5" />} label="Game" color="text-purple-500" bg="bg-purple-50" />
         </div>
 
-        {/* 3D FLASHCARD AREA - ĐÃ CẬP NHẬT TRƯỢT KIỂU QUIZLET */}
         {activeTab === 'flashcards' && cards.length > 0 && (
           <div className="mb-20">
             <div className="flex items-center justify-between mb-4 px-1">
@@ -229,11 +225,9 @@ export default function SetDetailPage() {
                   isFlipped={isFlipped}
                   setIsFlipped={setIsFlipped}
                   onSwipe={(dir: number) => {
-                    // Nếu vuốt phải (1) -> Đánh dấu đã học
                     if (dir === 1 && !masteredIds.has(cards[currentIndex].id)) {
                       toggleMastered(cards[currentIndex].id);
                     }
-                    // Chuyển thẻ tiếp theo
                     setCurrentIndex((prev) => (prev + 1) % cards.length);
                     setIsFlipped(false);
                   }}
@@ -249,7 +243,7 @@ export default function SetDetailPage() {
           </div>
         )}
 
-        {/* LIST & INLINE ADDING */}
+        {/* PHẦN CÒN LẠI GIỮ NGUYÊN CODE CŨ CỦA DUY */}
         <section className="mt-16">
           <div className="flex items-center justify-between mb-8 border-b border-slate-200 pb-5">
             <div className="flex items-center gap-3">

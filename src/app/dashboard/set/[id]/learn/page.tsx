@@ -2,8 +2,8 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
-import { ArrowLeft, Check, X, RefreshCw } from 'lucide-react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { ArrowLeft, Sparkles } from 'lucide-react'
+import { motion } from 'framer-motion'
 
 export default function LearnPage() {
   const { id } = useParams()
@@ -53,17 +53,19 @@ export default function LearnPage() {
     }
   }
 
-  if (cards.length === 0) return <div className="p-20 text-center">Đang chuẩn bị bài học...</div>
+  if (cards.length === 0) {
+    return <div className="min-h-screen flex items-center justify-center text-slate-500">Loading...</div>
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/30 flex flex-col items-center p-6">
-      <div className="w-full max-w-2xl flex justify-between items-center mb-10">
-        <button onClick={() => router.back()} className="flex items-center gap-2 text-slate-500 font-bold"><ArrowLeft /> Thoát</button>
-        <div className="text-sm font-black text-slate-400">TIẾN ĐỘ: {currentIndex + 1} / {cards.length}</div>
+      <div className="w-full max-w-3xl flex justify-between items-center mb-8">
+        <button onClick={() => router.back()} className="flex items-center gap-2 text-slate-500 font-semibold hover:text-slate-700"><ArrowLeft className="w-4 h-4" /> Back</button>
+        <div className="text-xs font-semibold text-slate-400 tracking-widest">PROGRESS {currentIndex + 1} / {cards.length}</div>
       </div>
 
-      <div className="w-full max-w-2xl bg-white rounded-[3rem] p-12 shadow-xl border border-slate-100 text-center">
-        <h2 className="text-sm font-black text-indigo-500 uppercase tracking-[0.3em] mb-10">Định nghĩa</h2>
+      <div className="w-full max-w-3xl bg-white/80 backdrop-blur-sm rounded-[2.5rem] p-10 shadow-xl border border-slate-100 text-center">
+        <div className="flex items-center justify-center gap-2 text-xs font-black text-indigo-500 uppercase tracking-[0.35em] mb-8"><Sparkles className="w-4 h-4" /> Definition</div>
         <p className="text-3xl font-bold text-slate-800 mb-12 leading-relaxed">"{cards[currentIndex].definition}"</p>
 
         <input 
@@ -75,15 +77,16 @@ export default function LearnPage() {
             status === 'correct' ? 'border-emerald-500 bg-emerald-50 text-emerald-700' :
             status === 'wrong' ? 'border-red-400 bg-red-50 text-red-700' : 'border-slate-100 bg-slate-50 focus:border-indigo-500'
           }`}
-          placeholder="Gõ từ tiếng Anh..."
+          placeholder="Type the term..."
         />
 
         {status === 'wrong' && (
-          <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-4 text-emerald-600 font-bold italic">
-            Gợi ý: {cards[currentIndex].term}
-          </motion.p>
+          <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-4 text-emerald-600 font-bold italic">Hint: {cards[currentIndex].term}</motion.p>
         )}
       </div>
     </div>
   )
 }
+
+
+
