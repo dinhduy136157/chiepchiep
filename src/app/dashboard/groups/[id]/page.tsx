@@ -1,6 +1,6 @@
 "use client"
-import { useEffect, useState } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useEffect, useMemo, useState } from 'react'
+import { useParams } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -11,25 +11,54 @@ import {
   Users, 
   ChevronRight, 
   X, 
-  Crown, 
-  User, 
   Plus,
   Share2,
-  TrendingUp,
   Target,
   Sparkles,
-  ArrowLeft
 } from 'lucide-react'
+
+type Group = {
+  id: string
+  name: string
+  description: string | null
+}
+
+type Member = {
+  user_id: string
+  role: string
+  profiles?: {
+    username?: string | null
+    avatar_url?: string | null
+  } | null
+}
+
+type StudySet = {
+  id: string
+  title: string
+  description: string | null
+}
+
+type SharedSetCard = {
+  id: number
+  learning_progress?: { user_id: string; status: string }[] | null
+}
+
+type SharedSet = StudySet & {
+  cards?: SharedSetCard[]
+}
+
+type SharedSetRelationRow = {
+  study_sets: SharedSet | SharedSet[] | null
+}
 
 export default function GroupDetailPage() {
   const { id } = useParams()
-  const router = useRouter()
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
   
-  const [group, setGroup] = useState<any>(null)
-  const [members, setMembers] = useState<any[]>([])
-  const [sharedSets, setSharedSets] = useState<any[]>([])
-  const [mySets, setMySets] = useState<any[]>([])
+  const [group, setGroup] = useState<Group | null>(null)
+  const [members, setMembers] = useState<Member[]>([])
+  const [sharedSets, setSharedSets] = useState<SharedSet[]>([])
+  const [mySets, setMySets] = useState<StudySet[]>([])
   const [loading, setLoading] = useState(true)
   const [showShareModal, setShowShareModal] = useState(false)
   const [userName, setUserName] = useState<string>("Duy")
@@ -80,21 +109,43 @@ export default function GroupDetailPage() {
         .eq('group_id', id)
 
       setGroup(gData)
-      setMembers(mData || [])
+      const normalizedMembers: Member[] = (mData ?? []).map((member) => {
+        const profileValue = Array.isArray(member.profiles) ? member.profiles[0] : member.profiles
+        return {
+          user_id: member.user_id,
+          role: member.role,
+          profiles: profileValue ?? null,
+        }
+      })
+
+      setMembers(normalizedMembers)
       setMySets(msData || [])
-      setSharedSets(ssData?.map(item => item.study_sets) || [])
+      const normalizedSharedSets: SharedSet[] = ((ssData ?? []) as SharedSetRelationRow[])
+        .flatMap((item) => {
+          if (!item.study_sets) return []
+          return Array.isArray(item.study_sets) ? item.study_sets : [item.study_sets]
+        })
+      setSharedSets(normalizedSharedSets)
       setLoading(false)
     }
     fetchEverything()
   }, [id, supabase])
 
   const handleShareSet = async (setId: string) => {
+    const selectedSet = mySets.find((set) => String(set.id) === String(setId))
+    if (!selectedSet) return
+
     const { error } = await supabase.from('group_study_sets').insert([{ group_id: id, set_id: setId }])
-    if (error) alert("Học phần này đã có trong nhóm!")
-    else {
-      setShowShareModal(false)
-      window.location.reload()
+    if (error) {
+      alert("Học phần này đã có trong nhóm!")
+      return
     }
+
+    setSharedSets((prev) => {
+      if (prev.some((set) => set.id === selectedSet.id)) return prev
+      return [...prev, { ...selectedSet, cards: [] }]
+    })
+    setShowShareModal(false)
   }
 
   if (loading) return (
@@ -237,8 +288,8 @@ export default function GroupDetailPage() {
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                       {members.map((member) => {
                         const totalCards = set.cards?.length || 0;
-                        const masteredCount = set.cards?.filter((card: any) => 
-                          card.learning_progress?.some((lp: any) => 
+                        const masteredCount = set.cards?.filter((card: SharedSetCard) => 
+                          card.learning_progress?.some((lp) => 
                             lp.user_id === member.user_id && lp.status === 'mastered'
                           )
                         ).length || 0;

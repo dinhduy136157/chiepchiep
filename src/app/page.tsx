@@ -1,10 +1,11 @@
 "use client"
 import { useEffect } from 'react'
+import { useMemo } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import { useRouter } from 'next/navigation'
 
 export default function RootPage() {
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
   const router = useRouter()
 
   useEffect(() => {
@@ -14,7 +15,7 @@ export default function RootPage() {
       else router.push('/auth/login')
     }
     checkUser()
-  }, [])
+  }, [router, supabase])
 
   return (
     <div className="min-h-screen flex items-center justify-center italic text-slate-400">

@@ -33,6 +33,16 @@ type Group = {
   role?: string | null
 }
 
+type ProgressRow = {
+  cards:
+    | {
+        study_sets: StudySet | StudySet[]
+      }
+    | {
+        study_sets: StudySet | StudySet[]
+      }[]
+}
+
 export default function DashboardPage() {
   const supabase = createClient()
   const router = useRouter()
@@ -90,14 +100,17 @@ export default function DashboardPage() {
       
       if (!cancelled && progressRows) {
         // Loại bỏ trùng lặp study_set_id
-        const uniqueSets = new Map();
-        progressRows.forEach((row: any) => {
-          const s = row.cards.study_sets;
-          if (!uniqueSets.has(s.id)) {
-            uniqueSets.set(s.id, s);
-          }
-        });
-        setStudySets(Array.from(uniqueSets.values()).slice(0, 5));
+        const uniqueSets = new Map<string, StudySet>()
+        ;(progressRows as ProgressRow[]).forEach((row) => {
+          const cards = Array.isArray(row.cards) ? row.cards : [row.cards]
+          cards.forEach((cardRow) => {
+            const sets = Array.isArray(cardRow.study_sets) ? cardRow.study_sets : [cardRow.study_sets]
+            sets.forEach((setItem) => {
+              if (!uniqueSets.has(setItem.id)) uniqueSets.set(setItem.id, setItem)
+            })
+          })
+        })
+        setStudySets(Array.from(uniqueSets.values()).slice(0, 5))
       }
       // ---------------------------------------------------------
 
@@ -450,7 +463,7 @@ export default function DashboardPage() {
                     Tham gia nhóm để học tập cùng bạn bè và theo dõi tiến độ!
                   </p>
                   <Link 
-                    href="/dashboard/groups/create"
+                    href="/dashboard/groups"
                     className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-600 font-medium rounded-lg hover:bg-emerald-100 transition-colors"
                   >
                     <Plus className="w-4 h-4" />
@@ -489,7 +502,7 @@ export default function DashboardPage() {
                                 </span>
                                 <span className="text-xs text-slate-400 flex items-center gap-1">
                                   <Users className="w-3 h-3" />
-                                  2 thành viên
+                                  Thành viên
                                 </span>
                               </div>
                             </div>

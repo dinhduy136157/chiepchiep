@@ -414,7 +414,7 @@ export default function GroupsPage() {
                           </div>
                           <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 group-hover:translate-x-1 transition-all" />
                         </div>
-                        <p className="text-sm text-slate-500 line-clamp-2 pl-13">
+                        <p className="text-sm text-slate-500 line-clamp-2 pl-12">
                           {group.description || 'Nhóm học tập - Cùng nhau tiến bộ mỗi ngày'}
                         </p>
                       </div>

@@ -5,13 +5,11 @@ import { Moon, Settings, Sun } from 'lucide-react'
 
 export default function SettingsMenu() {
   const [open, setOpen] = useState(false)
-  const [isDark, setIsDark] = useState(false)
+  const [isDark, setIsDark] = useState(() => {
+    if (typeof document === 'undefined') return false
+    return document.documentElement.classList.contains('dark')
+  })
   const menuRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    const isDarkMode = document.documentElement.classList.contains('dark')
-    setIsDark(isDarkMode)
-  }, [])
 
   useEffect(() => {
     const handleClick = (event: MouseEvent) => {
@@ -44,16 +42,16 @@ export default function SettingsMenu() {
       {open && (
         <div className="absolute right-0 mt-2 w-56 rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden z-20">
           <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/60">
-            <p className="text-sm font-semibold text-slate-700">Cai dat</p>
+            <p className="text-sm font-semibold text-slate-700">Cài đặt</p>
           </div>
           <button
             onClick={toggleTheme}
             className="w-full px-4 py-3 text-left text-sm text-slate-600 hover:bg-slate-50 transition-colors flex items-center gap-2"
           >
             {isDark ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
-            Che do toi
+            Chế độ tối
             <span className="ml-auto text-xs text-slate-400">
-              {isDark ? 'Bat' : 'Tat'}
+              {isDark ? 'Bật' : 'Tắt'}
             </span>
           </button>
         </div>

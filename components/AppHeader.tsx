@@ -45,7 +45,7 @@ export default function AppHeader({
                 <Search className="w-4 h-4 text-slate-400" />
                 <input
                   type="text"
-                  placeholder="Tim kiem hoc phan..."
+                  placeholder="Tìm kiếm học phần..."
                   value={searchTerm ?? ''}
                   onChange={(e) => onSearchChange?.(e.target.value)}
                   className="bg-transparent border-none outline-none text-sm text-slate-600 w-full placeholder:text-slate-400"
