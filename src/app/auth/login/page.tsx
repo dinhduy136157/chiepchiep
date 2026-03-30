@@ -1,6 +1,6 @@
 "use client"
 
-import { FormEvent, useMemo, useState } from "react"
+import { FormEvent, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/utils/supabase/client"
@@ -15,6 +15,22 @@ export default function LoginPage() {
   const supabase = useMemo(() => createClient(), [])
   const router = useRouter()
 
+  useEffect(() => {
+    let isActive = true
+
+    const checkExistingSession = async () => {
+      const { data } = await supabase.auth.getSession()
+      if (isActive && data.session) {
+        router.replace("/dashboard")
+      }
+    }
+
+    checkExistingSession()
+    return () => {
+      isActive = false
+    }
+  }, [router, supabase])
+
   const handleLogin = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setLoading(true)
@@ -26,7 +42,7 @@ export default function LoginPage() {
       setLoading(false)
       return
     }
-    router.push("/dashboard")
+    router.replace("/dashboard")
   }
 
   return (

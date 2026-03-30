@@ -10,9 +10,16 @@ export default function RootPage() {
 
   useEffect(() => {
     const checkUser = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (session) router.push('/dashboard')
-      else router.push('/auth/login')
+      let session = (await supabase.auth.getSession()).data.session
+
+      // On mobile/PWA launch, auth restore can be slightly delayed.
+      if (!session) {
+        await new Promise((resolve) => setTimeout(resolve, 350))
+        session = (await supabase.auth.getSession()).data.session
+      }
+
+      if (session) router.replace('/dashboard')
+      else router.replace('/auth/login')
     }
     checkUser()
   }, [router, supabase])

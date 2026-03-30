@@ -1,64 +1,97 @@
-import { createClient as createSupabaseClient, type Session, type SupabaseClient } from "@supabase/supabase-js";
+import { createClient as createSupabaseClient, type SupabaseClient } from "@supabase/supabase-js";
 
 const AUTH_STORAGE_KEY = "flashcard-chiep-auth";
-const LONG_SESSION_BACKUP_KEY = "flashcard-chiep-auth-backup";
+const AUTH_STORAGE_BACKUP_KEY = "flashcard-chiep-auth-backup";
+const AUTH_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 180; // 180 days
 
 let browserClient: SupabaseClient | null = null;
-let isSessionBootstrapDone = false;
 
 function isBrowser(): boolean {
-  return typeof window !== "undefined";
+  return typeof window !== "undefined" && typeof document !== "undefined";
 }
 
-function saveSessionBackup(session: Session | null): void {
-  if (!isBrowser()) return;
-
-  try {
-    if (session) {
-      localStorage.setItem(LONG_SESSION_BACKUP_KEY, JSON.stringify(session));
-      return;
-    }
-
-    localStorage.removeItem(LONG_SESSION_BACKUP_KEY);
-  } catch {
-    // Ignore storage errors on restricted environments.
-  }
-}
-
-function readSessionBackup(): Session | null {
+function readCookie(name: string): string | null {
   if (!isBrowser()) return null;
 
-  try {
-    const raw = localStorage.getItem(LONG_SESSION_BACKUP_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw) as Session;
-  } catch {
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = document.cookie.match(new RegExp(`(?:^|; )${escaped}=([^;]*)`));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+function writeCookie(name: string, value: string): void {
+  if (!isBrowser()) return;
+
+  const secure = window.location.protocol === "https:" ? "; Secure" : "";
+  document.cookie = `${name}=${encodeURIComponent(value)}; Max-Age=${AUTH_COOKIE_MAX_AGE_SECONDS}; Path=/; SameSite=Lax${secure}`;
+}
+
+function removeCookie(name: string): void {
+  if (!isBrowser()) return;
+  document.cookie = `${name}=; Max-Age=0; Path=/; SameSite=Lax`;
+}
+
+const durableAuthStorage = {
+  getItem(key: string): string | null {
+    if (!isBrowser()) return null;
+
+    try {
+      const primary = localStorage.getItem(key);
+      if (primary) return primary;
+
+      if (key === AUTH_STORAGE_KEY) {
+        const backup = localStorage.getItem(AUTH_STORAGE_BACKUP_KEY);
+        if (backup) return backup;
+      }
+    } catch {
+      // Ignore and fallback to cookie.
+    }
+
+    const fromCookie = readCookie(key);
+    if (fromCookie) return fromCookie;
+
+    if (key === AUTH_STORAGE_KEY) {
+      return readCookie(AUTH_STORAGE_BACKUP_KEY);
+    }
+
     return null;
-  }
-}
+  },
 
-async function bootstrapLongSession(client: SupabaseClient): Promise<void> {
-  if (!isBrowser() || isSessionBootstrapDone) return;
-  isSessionBootstrapDone = true;
+  setItem(key: string, value: string): void {
+    if (!isBrowser()) return;
 
-  client.auth.onAuthStateChange((_event, session) => {
-    saveSessionBackup(session);
-  });
+    try {
+      localStorage.setItem(key, value);
+      if (key === AUTH_STORAGE_KEY) {
+        localStorage.setItem(AUTH_STORAGE_BACKUP_KEY, value);
+      }
+    } catch {
+      // Ignore and keep cookie persistence.
+    }
 
-  const { data } = await client.auth.getSession();
-  if (data.session) {
-    saveSessionBackup(data.session);
-    return;
-  }
+    writeCookie(key, value);
+    if (key === AUTH_STORAGE_KEY) {
+      writeCookie(AUTH_STORAGE_BACKUP_KEY, value);
+    }
+  },
 
-  const backupSession = readSessionBackup();
-  if (!backupSession?.access_token || !backupSession?.refresh_token) return;
+  removeItem(key: string): void {
+    if (!isBrowser()) return;
 
-  await client.auth.setSession({
-    access_token: backupSession.access_token,
-    refresh_token: backupSession.refresh_token,
-  });
-}
+    try {
+      localStorage.removeItem(key);
+      if (key === AUTH_STORAGE_KEY) {
+        localStorage.removeItem(AUTH_STORAGE_BACKUP_KEY);
+      }
+    } catch {
+      // Ignore storage errors.
+    }
+
+    removeCookie(key);
+    if (key === AUTH_STORAGE_KEY) {
+      removeCookie(AUTH_STORAGE_BACKUP_KEY);
+    }
+  },
+};
 
 export function createClient(): SupabaseClient {
   if (browserClient) return browserClient;
@@ -72,10 +105,10 @@ export function createClient(): SupabaseClient {
         autoRefreshToken: true,
         detectSessionInUrl: true,
         storageKey: AUTH_STORAGE_KEY,
+        storage: durableAuthStorage,
       },
     }
   );
 
-  void bootstrapLongSession(browserClient);
   return browserClient;
 }
