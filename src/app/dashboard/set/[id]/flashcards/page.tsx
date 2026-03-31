@@ -28,20 +28,24 @@ function SwipeCard({
   const opacity = useTransform(x, [-280, -160, 0, 160, 280], [0, 1, 1, 1, 0]);
   const leftOpacity = useTransform(x, [-120, -40], [1, 0]);
   const rightOpacity = useTransform(x, [40, 120], [0, 1]);
+  const swipeConfidenceThreshold = 9000;
 
   return (
     <motion.div
       style={{ x, rotate, opacity, touchAction: "pan-y" }}
       className="absolute inset-0 cursor-grab active:cursor-grabbing select-none"
       drag="x"
-      dragConstraints={{ left: 0, right: 0 }}
-      dragElastic={0.22}
+      dragConstraints={{ left: -220, right: 220 }}
+      dragElastic={0.35}
+      dragMomentum
+      whileDrag={{ scale: 0.985 }}
       onTap={onFlip}
       onDragEnd={(_, info) => {
         const offset = info.offset.x;
         const velocity = info.velocity.x;
-        if (offset > 90 || velocity > 700) onSwipe("right");
-        else if (offset < -90 || velocity < -700) onSwipe("left");
+        const swipePower = Math.abs(offset) * Math.abs(velocity);
+        if (offset > 55 || velocity > 260 || (offset > 0 && swipePower > swipeConfidenceThreshold)) onSwipe("right");
+        else if (offset < -55 || velocity < -260 || (offset < 0 && swipePower > swipeConfidenceThreshold)) onSwipe("left");
       }}
       initial={{ scale: 0.96, opacity: 0, y: 12 }}
       animate={{ scale: 1, opacity: 1, y: 0 }}
