@@ -27,12 +27,12 @@ export default function AppHeader({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-8">
-            <Link href="/dashboard" className="flex items-center gap-2 group">
-              <div className="w-8 h-8 rounded-lg overflow-hidden ring-1 ring-slate-200 group-hover:scale-105 transition-transform">
+            <Link href="/dashboard" className="flex items-center gap-3 group">
+              <div className="w-11 h-11 rounded-full overflow-hidden ring-1 ring-slate-200 bg-white group-hover:scale-105 transition-transform">
                 <img
                   src="/logo.jpg"
                   alt="Duy logo"
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-cover rounded-full"
                 />
               </div>
               <span className="font-bold text-slate-800 hidden sm:block">Duy Vocabulary</span>
