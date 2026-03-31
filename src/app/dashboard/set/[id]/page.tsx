@@ -7,7 +7,7 @@ import { motion, AnimatePresence, useMotionValue, useTransform } from 'framer-mo
 import { 
   ChevronLeft, ChevronRight, Check, BookOpen, RotateCw, 
   ArrowLeft, Plus, Send, X, PlusCircle, Brain, 
-  FileText, LayoutGrid, Zap, Gamepad2, Volume2, FileDown, Crown
+  FileText, LayoutGrid, Volume2, FileDown, Crown
 } from 'lucide-react'
 
 // --- COMPONENT CON TỐI ƯU TRƯỢT MƯỢT MÀ CHẬM RÃI ---
@@ -201,13 +201,12 @@ export default function SetDetailPage() {
           <p className="text-slate-500 mt-2 font-medium">{description || "Cố lên BRO!!"}</p>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-12">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-12">
           <ModeButton icon={<BookOpen className="w-5 h-5" />} label="Thẻ ghi nhớ" isActive={activeTab === 'flashcards'} onClick={() => setActiveTab('flashcards')} color="text-blue-500" bg="bg-blue-50" />
+          <ModeButton icon={<Crown className="w-5 h-5" />} label="Học thẻ ghi nhớ" onClick={() => router.push(`/dashboard/set/${id}/flashcards`)} color="text-amber-500" bg="bg-amber-50" />
           <ModeButton icon={<Brain className="w-5 h-5" />} label="Học" onClick={() => router.push(`/dashboard/set/${id}/learn`)} color="text-indigo-500" bg="bg-indigo-50" />
           <ModeButton icon={<FileText className="w-5 h-5" />} label="Kiểm tra" onClick={() => router.push(`/dashboard/set/${id}/test`)} color="text-emerald-500" bg="bg-emerald-50" />
           <ModeButton icon={<LayoutGrid className="w-5 h-5" />} label="Ghép thẻ" onClick={() => router.push(`/dashboard/set/${id}/match`)} color="text-orange-500" bg="bg-orange-50" />
-          <ModeButton icon={<Zap className="w-5 h-5" />} label="Blast" onClick={() => router.push(`/dashboard/set/${id}/blast`)} color="text-rose-500" bg="bg-rose-50" />
-          <ModeButton icon={<Gamepad2 className="w-5 h-5" />} label="Game" color="text-purple-500" bg="bg-purple-50" />
         </div>
 
         {activeTab === 'flashcards' && cards.length > 0 && (
