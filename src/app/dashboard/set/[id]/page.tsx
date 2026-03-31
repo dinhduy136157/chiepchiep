@@ -198,7 +198,7 @@ export default function SetDetailPage() {
       <main className="max-w-5xl mx-auto px-6 py-10">
         <div className="mb-8">
           <h1 className="text-4xl font-black text-slate-800 tracking-tight">{title}</h1>
-          <p className="text-slate-500 mt-2 font-medium">{description || "Học tập hiệu quả mỗi ngày cùng em Chiep 🐣"}</p>
+          <p className="text-slate-500 mt-2 font-medium">{description || "Cố lên BRO!!"}</p>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-12">

@@ -550,7 +550,7 @@ export default function DashboardPage() {
           <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl border border-indigo-100 p-4">
             <div className="flex items-center gap-3 text-sm text-slate-600">
               <GraduationCap className="w-5 h-5 text-indigo-600" />
-              <p>✨ <span className="font-medium">Ứng dụng được tạo ra để giúp em chiếp chăm học hơn</span></p>
+              <p>✨ <span className="font-medium">Học 15p mỗi ngày hiệu quả hơn học dồn 2 tiếng một ngày</span></p>
             </div>
           </div>
         </motion.div>

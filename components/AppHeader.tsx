@@ -1,7 +1,7 @@
 "use client"
 
 import Link from 'next/link'
-import { Bell, GraduationCap, Search } from 'lucide-react'
+import { Bell, Search } from 'lucide-react'
 import UserMenu from '@/components/UserMenu'
 import SettingsMenu from '@/components/SettingsMenu'
 
@@ -28,10 +28,14 @@ export default function AppHeader({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-8">
             <Link href="/dashboard" className="flex items-center gap-2 group">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center group-hover:scale-105 transition-transform">
-                <GraduationCap className="w-4 h-4 text-white" />
+              <div className="w-8 h-8 rounded-lg overflow-hidden ring-1 ring-slate-200 group-hover:scale-105 transition-transform">
+                <img
+                  src="/logo.jpg"
+                  alt="Duy logo"
+                  className="w-full h-full object-cover"
+                />
               </div>
-              <span className="font-bold text-slate-800 hidden sm:block">ChiepChiep</span>
+              <span className="font-bold text-slate-800 hidden sm:block">Duy Vocabulary</span>
             </Link>
 
             {pageTitle ? (

@@ -77,7 +77,7 @@ export default function MatchGamePage() {
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center bg-white">
-      <div className="text-center font-black text-emerald-600 animate-bounce text-2xl tracking-tighter italic">CHIEP CHIEP MATCH...</div>
+      <div className="text-center font-black text-emerald-600 animate-bounce text-2xl tracking-tighter italic">DUYVOCAB MATCH...</div>
     </div>
   )
 

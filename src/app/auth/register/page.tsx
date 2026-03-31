@@ -63,7 +63,7 @@ export default function RegisterPage() {
               <GraduationCap className="w-7 h-7 text-white" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-white">ChiepChiep</h1>
+              <h1 className="text-2xl font-bold text-white">Duy Vocabulary</h1>
               <p className="text-white/60 text-sm">Tạo tài khoản mới</p>
             </div>
           </div>
@@ -82,7 +82,7 @@ export default function RegisterPage() {
               required
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="ChiEp"
+              placeholder="DuyVocab"
               className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-white/40 outline-none focus:border-purple-400 focus:ring-2 focus:ring-purple-400/20"
             />
           </div>
