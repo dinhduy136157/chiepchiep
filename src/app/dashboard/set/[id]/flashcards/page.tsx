@@ -19,6 +19,7 @@ function SwipeCard({
   onSwipe,
   isDragging,
   setIsDragging,
+  onDragProgress,
 }: {
   card: Card;
   flipped: boolean;
@@ -26,6 +27,7 @@ function SwipeCard({
   onSwipe: (direction: "left" | "right") => void;
   isDragging: boolean;
   setIsDragging: (dragging: boolean) => void;
+  onDragProgress?: (offset: number) => void;
 }) {
   const x = useMotionValue(0);
   const rotate = useTransform(x, [-200, 200], [-8, 8]);
@@ -35,6 +37,16 @@ function SwipeCard({
   
   const dragStartX = useRef(0);
   const dragStartTime = useRef(0);
+
+  // Theo dõi quá trình kéo để tạo hiệu ứng
+  useEffect(() => {
+    const unsubscribe = x.onChange((value) => {
+      if (onDragProgress && Math.abs(value) > 30) {
+        onDragProgress(value);
+      }
+    });
+    return unsubscribe;
+  }, [x, onDragProgress]);
 
   const handleDragStart = () => {
     setIsDragging(true);
@@ -46,9 +58,11 @@ function SwipeCard({
     setIsDragging(false);
     const offset = info.offset.x;
     const velocity = info.velocity.x;
-    const timeDiff = Date.now() - dragStartTime.current;
     const distance = Math.abs(offset);
     const speed = Math.abs(velocity);
+    
+    // Reset vị trí thẻ
+    x.set(0);
     
     // Ngưỡng quẹt: di chuyển > 80px HOẶC tốc độ cao
     const shouldSwipe = distance > 80 || speed > 400;
@@ -73,7 +87,6 @@ function SwipeCard({
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
       onTap={() => {
-        // Chỉ lật thẻ khi không đang kéo
         if (!isDragging) {
           onFlip();
         }
@@ -83,7 +96,6 @@ function SwipeCard({
       exit={{ scale: 0.94, opacity: 0, y: -10 }}
       transition={{ duration: 0.2 }}
     >
-      {/* Left swipe indicator */}
       <motion.div
         style={{ opacity: leftOpacity }}
         className="absolute top-7 right-6 z-20 rounded-lg border-2 border-rose-500 bg-white/95 px-3 py-1 text-xs font-black text-rose-500 shadow-lg md:text-sm"
@@ -91,7 +103,6 @@ function SwipeCard({
         <X className="inline h-3 w-3 mr-1" /> Học lại
       </motion.div>
       
-      {/* Right swipe indicator */}
       <motion.div
         style={{ opacity: rightOpacity }}
         className="absolute top-7 left-6 z-20 rounded-lg border-2 border-emerald-500 bg-white/95 px-3 py-1 text-xs font-black text-emerald-600 shadow-lg md:text-sm"
@@ -104,7 +115,6 @@ function SwipeCard({
         animate={{ rotateY: flipped ? 180 : 0 }}
         transition={{ type: "spring", stiffness: 300, damping: 30 }}
       >
-        {/* Front - Term */}
         <div className="absolute inset-0 rounded-[2rem] border border-slate-200 bg-white p-6 [backface-visibility:hidden] md:rounded-[2.5rem] md:p-10">
           <div className="mb-5 text-[10px] font-black uppercase tracking-[0.22em] text-slate-300">Thuật ngữ</div>
           <div className="flex h-[calc(100%-2rem)] items-center justify-center text-center text-2xl font-black leading-tight text-slate-800 md:text-5xl">
@@ -114,8 +124,6 @@ function SwipeCard({
             👆 Nhấn để lật
           </div>
         </div>
-        
-        {/* Back - Definition */}
         <div className="absolute inset-0 rounded-[2rem] border border-emerald-400 bg-gradient-to-br from-emerald-500 to-emerald-600 p-6 text-white [backface-visibility:hidden] [transform:rotateY(180deg)] md:rounded-[2.5rem] md:p-10">
           <div className="mb-5 text-[10px] font-black uppercase tracking-[0.22em] text-emerald-200">Định nghĩa</div>
           <div className="flex h-[calc(100%-2rem)] items-center justify-center text-center text-xl font-bold leading-relaxed md:text-3xl">
@@ -143,39 +151,78 @@ export default function FlashcardsPage() {
   const [loading, setLoading] = useState(true);
   const [isDragging, setIsDragging] = useState(false);
   const [showToast, setShowToast] = useState<{ show: boolean; message: string; type: string }>({ show: false, message: "", type: "" });
+  const [dragProgress, setDragProgress] = useState(0);
+  
+  const audioContext = useRef<AudioContext | null>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
 
-  // Hiệu ứng rung trên điện thoại
-  const triggerHaptic = useCallback((type: "left" | "right" | "flip") => {
-    if (typeof window === "undefined") return;
+  // Tạo hiệu ứng rung bằng CSS + Animation (cho cả desktop và mobile)
+  const triggerHapticEffect = useCallback((intensity: "light" | "medium" | "heavy") => {
+    if (!cardRef.current) return;
     
-    // Kiểm tra hỗ trợ rung
-    const supportsVibrate = "vibrate" in navigator;
-    if (!supportsVibrate) return;
+    const card = cardRef.current;
+    card.classList.add("haptic-feedback");
     
-    // Chỉ rung trên thiết bị cảm ứng
-    const isTouchDevice = "ontouchstart" in window || navigator.maxTouchPoints > 0;
-    if (!isTouchDevice) return;
+    // Cường độ rung khác nhau
+    let duration = 0;
+    let intensityPx = 0;
     
-    // Các pattern rung khác nhau cho từng hành động
-    switch (type) {
-      case "right":
-        // Rung ngắn + nhẹ khi đánh dấu đã biết
-        navigator.vibrate([12, 30, 12]);
+    switch (intensity) {
+      case "light":
+        duration = 60;
+        intensityPx = 1.5;
         break;
-      case "left":
-        // Rung ngắn khi học lại
-        navigator.vibrate([20]);
+      case "medium":
+        duration = 100;
+        intensityPx = 3;
         break;
-      case "flip":
-        // Rung rất nhẹ khi lật thẻ
-        navigator.vibrate(8);
+      case "heavy":
+        duration = 150;
+        intensityPx = 5;
         break;
-      default:
-        break;
+    }
+    
+    // Animation rung bằng translate X
+    card.style.animation = `shake-${intensity} ${duration}ms ease-in-out`;
+    
+    setTimeout(() => {
+      card.classList.remove("haptic-feedback");
+      card.style.animation = "";
+    }, duration);
+    
+    // Thử vibrate API nếu có (chỉ trên thiết bị thực)
+    if (typeof navigator !== "undefined" && navigator.vibrate) {
+      if (intensity === "light") navigator.vibrate(10);
+      else if (intensity === "medium") navigator.vibrate(20);
+      else navigator.vibrate([30, 15, 30]);
     }
   }, []);
 
-  // Hiển thị toast thông báo
+  // Tạo hiệu ứng âm thanh nhẹ (tùy chọn)
+  const playSwipeSound = useCallback(() => {
+    if (typeof window === "undefined") return;
+    try {
+      if (!audioContext.current) {
+        audioContext.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      }
+      const ctx = audioContext.current;
+      const oscillator = ctx.createOscillator();
+      const gainNode = ctx.createGain();
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(ctx.destination);
+      
+      oscillator.frequency.value = 800;
+      gainNode.gain.value = 0.1;
+      
+      oscillator.start();
+      gainNode.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + 0.1);
+      oscillator.stop(ctx.currentTime + 0.1);
+    } catch (e) {
+      // Bỏ qua nếu không hỗ trợ audio
+    }
+  }, []);
+
   const showTemporaryToast = (message: string, type: "success" | "info" | "warning") => {
     setShowToast({ show: true, message, type });
     setTimeout(() => {
@@ -218,13 +265,12 @@ export default function FlashcardsPage() {
       else next.add(cardId);
       setMastered(next);
       
-      // Hiển thị toast và rung
       if (!isMastered) {
         showTemporaryToast("✨ Đã đánh dấu thuộc bài!", "success");
-        triggerHaptic("right");
+        triggerHapticEffect("medium");
       } else {
         showTemporaryToast("🔄 Bỏ đánh dấu thuộc bài", "info");
-        triggerHaptic("left");
+        triggerHapticEffect("light");
       }
 
       await supabase.from("learning_progress").upsert(
@@ -237,42 +283,54 @@ export default function FlashcardsPage() {
         { onConflict: "user_id, card_id" }
       );
     },
-    [mastered, supabase, triggerHaptic]
+    [mastered, supabase, triggerHapticEffect]
   );
 
   const nextCard = useCallback(() => {
     if (cards.length === 0) return;
     setIndex((prev) => (prev + 1) % cards.length);
     setFlipped(false);
-  }, [cards.length]);
+    // Hiệu ứng rung nhẹ khi chuyển thẻ
+    triggerHapticEffect("light");
+  }, [cards.length, triggerHapticEffect]);
 
   const handleSwipe = useCallback((direction: "left" | "right") => {
     const currentCard = cards[index];
     
+    // Hiệu ứng rung mạnh khi quẹt thành công
+    triggerHapticEffect("heavy");
+    
     if (direction === "right") {
-      // Quẹt phải = đánh dấu đã biết
       if (!mastered.has(currentCard.id)) {
         markMastered(currentCard.id);
+        showTemporaryToast("🎉 Giỏi quá! Đã thuộc bài này", "success");
       } else {
         showTemporaryToast("📚 Bạn đã biết thẻ này rồi!", "info");
-        triggerHaptic("left");
       }
     } else {
-      // Quẹt trái = học lại (không ảnh hưởng đến mastered)
       showTemporaryToast("🔄 Học lại thẻ này sau", "info");
-      triggerHaptic("left");
     }
     
     // Chuyển sang thẻ tiếp theo
-    nextCard();
-  }, [cards, index, mastered, markMastered, nextCard, triggerHaptic]);
+    setTimeout(() => {
+      nextCard();
+    }, 50);
+  }, [cards, index, mastered, markMastered, nextCard, triggerHapticEffect]);
 
   const handleFlip = useCallback(() => {
     if (!isDragging) {
       setFlipped((prev) => !prev);
-      triggerHaptic("flip");
+      triggerHapticEffect("light");
     }
-  }, [isDragging, triggerHaptic]);
+  }, [isDragging, triggerHapticEffect]);
+
+  const handleDragProgress = useCallback((offset: number) => {
+    setDragProgress(Math.abs(offset));
+    // Rung nhẹ khi kéo đến ngưỡng
+    if (Math.abs(offset) > 60 && dragProgress < 60) {
+      triggerHapticEffect("light");
+    }
+  }, [dragProgress, triggerHapticEffect]);
 
   if (loading) {
     return <div className="flex min-h-screen items-center justify-center text-slate-500">Đang tải dữ liệu...</div>;
@@ -313,7 +371,7 @@ export default function FlashcardsPage() {
             onClick={() => {
               setIndex(Math.floor(Math.random() * cards.length));
               setFlipped(false);
-              triggerHaptic("flip");
+              triggerHapticEffect("light");
             }}
             className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
             aria-label="Xáo trộn"
@@ -362,7 +420,7 @@ export default function FlashcardsPage() {
           </span>
         </div>
 
-        <div className="relative h-[62vh] min-h-[380px] max-h-[620px] [perspective:1200px]">
+        <div ref={cardRef} className="relative h-[62vh] min-h-[380px] max-h-[620px] [perspective:1200px]">
           <AnimatePresence mode="wait">
             <SwipeCard
               key={current.id}
@@ -372,6 +430,7 @@ export default function FlashcardsPage() {
               onSwipe={handleSwipe}
               isDragging={isDragging}
               setIsDragging={setIsDragging}
+              onDragProgress={handleDragProgress}
             />
           </AnimatePresence>
         </div>
@@ -380,7 +439,7 @@ export default function FlashcardsPage() {
           <button
             onClick={() => {
               nextCard();
-              triggerHaptic("left");
+              triggerHapticEffect("light");
             }}
             className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-600 shadow-sm transition hover:border-slate-300 active:scale-95"
           >
@@ -400,7 +459,7 @@ export default function FlashcardsPage() {
           <button
             onClick={() => {
               nextCard();
-              triggerHaptic("right");
+              triggerHapticEffect("light");
             }}
             className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-600 shadow-sm transition hover:border-slate-300 active:scale-95"
           >
@@ -408,11 +467,34 @@ export default function FlashcardsPage() {
           </button>
         </div>
 
-        {/* Hướng dẫn quẹt thẻ cho mobile */}
         <div className="mt-6 text-center text-xs text-slate-400">
           💡 Quẹt phải để đánh dấu đã thuộc • Quẹt trái để học lại
         </div>
       </main>
+
+      <style jsx>{`
+        @keyframes shake-light {
+          0%, 100% { transform: translateX(0); }
+          25% { transform: translateX(-1px); }
+          75% { transform: translateX(1px); }
+        }
+        @keyframes shake-medium {
+          0%, 100% { transform: translateX(0); }
+          25% { transform: translateX(-2px); }
+          75% { transform: translateX(2px); }
+        }
+        @keyframes shake-heavy {
+          0%, 100% { transform: translateX(0); }
+          20% { transform: translateX(-3px); }
+          40% { transform: translateX(3px); }
+          60% { transform: translateX(-2px); }
+          80% { transform: translateX(2px); }
+        }
+        .haptic-feedback {
+          animation-duration: 100ms;
+          animation-timing-function: ease-in-out;
+        }
+      `}</style>
     </div>
   );
 }
