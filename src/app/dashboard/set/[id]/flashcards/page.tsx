@@ -95,6 +95,15 @@ export default function FlashcardsPage() {
   const [flipped, setFlipped] = useState(false);
   const [loading, setLoading] = useState(true);
 
+  const triggerHaptic = useCallback((direction: "left" | "right") => {
+    if (typeof window === "undefined") return;
+    const supportsTouch =
+      "ontouchstart" in window || navigator.maxTouchPoints > 0;
+    if (!supportsTouch || typeof navigator.vibrate !== "function") return;
+    // Slightly stronger pulse for right swipe to reinforce "mastered".
+    navigator.vibrate(direction === "right" ? [18, 20, 28] : [16]);
+  }, []);
+
   useEffect(() => {
     const load = async () => {
       const [{ data: setData }, { data: cardsData }, { data: authData }] = await Promise.all([
@@ -226,6 +235,7 @@ export default function FlashcardsPage() {
               flipped={flipped}
               onFlip={() => setFlipped((prev) => !prev)}
               onSwipe={(direction) => {
+                triggerHaptic(direction);
                 if (direction === "right" && !mastered.has(current.id)) markMastered(current.id);
                 nextCard();
               }}
