@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import { AnimatePresence, motion, useMotionValue, useTransform, PanInfo } from "framer-motion";
-import { ArrowLeft, Check, RotateCw, X } from "lucide-react";
+import { ArrowLeft, Check, RotateCw, Volume2, X } from "lucide-react";
 
 type Card = {
   id: number;
@@ -152,8 +152,8 @@ export default function FlashcardsPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [showToast, setShowToast] = useState<{ show: boolean; message: string; type: string }>({ show: false, message: "", type: "" });
   const [dragProgress, setDragProgress] = useState(0);
+  const [isSpeaking, setIsSpeaking] = useState(false);
   
-  const audioContext = useRef<AudioContext | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
 
   // Tạo hiệu ứng rung bằng CSS + Animation (cho cả desktop và mobile)
@@ -165,20 +165,15 @@ export default function FlashcardsPage() {
     
     // Cường độ rung khác nhau
     let duration = 0;
-    let intensityPx = 0;
-    
     switch (intensity) {
       case "light":
         duration = 60;
-        intensityPx = 1.5;
         break;
       case "medium":
         duration = 100;
-        intensityPx = 3;
         break;
       case "heavy":
         duration = 150;
-        intensityPx = 5;
         break;
     }
     
@@ -198,37 +193,50 @@ export default function FlashcardsPage() {
     }
   }, []);
 
-  // Tạo hiệu ứng âm thanh nhẹ (tùy chọn)
-  const playSwipeSound = useCallback(() => {
-    if (typeof window === "undefined") return;
-    try {
-      if (!audioContext.current) {
-        audioContext.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-      }
-      const ctx = audioContext.current;
-      const oscillator = ctx.createOscillator();
-      const gainNode = ctx.createGain();
-      
-      oscillator.connect(gainNode);
-      gainNode.connect(ctx.destination);
-      
-      oscillator.frequency.value = 800;
-      gainNode.gain.value = 0.1;
-      
-      oscillator.start();
-      gainNode.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + 0.1);
-      oscillator.stop(ctx.currentTime + 0.1);
-    } catch (e) {
-      // Bỏ qua nếu không hỗ trợ audio
-    }
+  const stopSpeaking = useCallback(() => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    window.speechSynthesis.cancel();
+    setIsSpeaking(false);
   }, []);
 
-  const showTemporaryToast = (message: string, type: "success" | "info" | "warning") => {
+  const showTemporaryToast = useCallback((message: string, type: "success" | "info" | "warning") => {
     setShowToast({ show: true, message, type });
     setTimeout(() => {
       setShowToast({ show: false, message: "", type: "" });
     }, 1500);
-  };
+  }, []);
+
+  const speakText = useCallback((text: string) => {
+    const content = text.trim();
+    if (!content) return;
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+      showTemporaryToast("Thiết bị chưa hỗ trợ phát âm", "warning");
+      return;
+    }
+
+    const synth = window.speechSynthesis;
+    synth.cancel();
+
+    const utterance = new SpeechSynthesisUtterance(content);
+    utterance.rate = 0.92;
+    utterance.pitch = 1;
+    utterance.volume = 1;
+    utterance.lang = /[ăâđêôơưáàảãạéèẻẽẹíìỉĩịóòỏõọúùủũụýỳỷỹỵ]/i.test(content) ? "vi-VN" : "en-US";
+
+    const voice = synth
+      .getVoices()
+      .find((item) => item.lang.toLowerCase().startsWith(utterance.lang.toLowerCase().slice(0, 2)));
+    if (voice) utterance.voice = voice;
+
+    utterance.onstart = () => setIsSpeaking(true);
+    utterance.onend = () => setIsSpeaking(false);
+    utterance.onerror = () => {
+      setIsSpeaking(false);
+      showTemporaryToast("Không thể phát âm từ này", "warning");
+    };
+
+    synth.speak(utterance);
+  }, [showTemporaryToast]);
 
   useEffect(() => {
     const load = async () => {
@@ -254,6 +262,10 @@ export default function FlashcardsPage() {
     };
     load();
   }, [id, supabase]);
+
+  useEffect(() => {
+    return () => stopSpeaking();
+  }, [stopSpeaking]);
 
   const markMastered = useCallback(
     async (cardId: number) => {
@@ -283,16 +295,17 @@ export default function FlashcardsPage() {
         { onConflict: "user_id, card_id" }
       );
     },
-    [mastered, supabase, triggerHapticEffect]
+    [mastered, showTemporaryToast, supabase, triggerHapticEffect]
   );
 
   const nextCard = useCallback(() => {
     if (cards.length === 0) return;
+    stopSpeaking();
     setIndex((prev) => (prev + 1) % cards.length);
     setFlipped(false);
     // Hiệu ứng rung nhẹ khi chuyển thẻ
     triggerHapticEffect("light");
-  }, [cards.length, triggerHapticEffect]);
+  }, [cards.length, stopSpeaking, triggerHapticEffect]);
 
   const handleSwipe = useCallback((direction: "left" | "right") => {
     const currentCard = cards[index];
@@ -315,14 +328,15 @@ export default function FlashcardsPage() {
     setTimeout(() => {
       nextCard();
     }, 50);
-  }, [cards, index, mastered, markMastered, nextCard, triggerHapticEffect]);
+  }, [cards, index, mastered, markMastered, nextCard, showTemporaryToast, triggerHapticEffect]);
 
   const handleFlip = useCallback(() => {
     if (!isDragging) {
+      stopSpeaking();
       setFlipped((prev) => !prev);
       triggerHapticEffect("light");
     }
-  }, [isDragging, triggerHapticEffect]);
+  }, [isDragging, stopSpeaking, triggerHapticEffect]);
 
   const handleDragProgress = useCallback((offset: number) => {
     setDragProgress(Math.abs(offset));
@@ -435,7 +449,7 @@ export default function FlashcardsPage() {
           </AnimatePresence>
         </div>
 
-        <div className="mt-6 grid grid-cols-3 gap-3 md:mt-8 md:gap-4">
+        <div className="mt-6 grid grid-cols-4 gap-3 md:mt-8 md:gap-4">
           <button
             onClick={() => {
               nextCard();
@@ -455,6 +469,18 @@ export default function FlashcardsPage() {
           >
             <Check className="h-4 w-4" />
             {mastered.has(current.id) ? "Đã thuộc" : "Đánh dấu"}
+          </button>
+          <button
+            onClick={() => speakText(flipped ? current.definition : current.term)}
+            className={`flex items-center justify-center gap-2 rounded-2xl border px-4 py-3 text-sm font-bold shadow-sm transition active:scale-95 ${
+              isSpeaking
+                ? "border-indigo-300 bg-indigo-50 text-indigo-700"
+                : "border-slate-200 bg-white text-slate-700 hover:border-indigo-300"
+            }`}
+            aria-label="Phát âm"
+          >
+            <Volume2 className="h-4 w-4" />
+            {isSpeaking ? "Đang đọc..." : flipped ? "Đọc nghĩa" : "Đọc từ"}
           </button>
           <button
             onClick={() => {
