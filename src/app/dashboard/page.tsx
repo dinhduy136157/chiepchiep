@@ -33,16 +33,6 @@ type Group = {
   role?: string | null
 }
 
-type ProgressRow = {
-  cards:
-    | {
-        study_sets: StudySet | StudySet[]
-      }
-    | {
-        study_sets: StudySet | StudySet[]
-      }[]
-}
-
 export default function DashboardPage() {
   const supabase = createClient()
   const router = useRouter()
@@ -83,45 +73,19 @@ export default function DashboardPage() {
         setUserName(user.email.split('@')[0] || "Duy")
       }
 
-      // --- LOGIC MỚI: FETCH HỌC PHẦN GẦN ĐÂY DỰA TRÊN TIẾN ĐỘ HỌC ---
-      const { data: progressRows, error: setLoadError } = await supabase
-        .from('learning_progress')
-        .select(`
-          cards!inner (
-            study_sets!inner (
-              id, title, description, created_at
-            )
-          )
-        `)
-        .eq('user_id', user.id)
-        .order('last_reviewed', { ascending: false })
-
-      if (!cancelled && setLoadError) setError(setLoadError.message)
-      
-      if (!cancelled && progressRows) {
-        // Loại bỏ trùng lặp study_set_id
-        const uniqueSets = new Map<string, StudySet>()
-        ;(progressRows as ProgressRow[]).forEach((row) => {
-          const cards = Array.isArray(row.cards) ? row.cards : [row.cards]
-          cards.forEach((cardRow) => {
-            const sets = Array.isArray(cardRow.study_sets) ? cardRow.study_sets : [cardRow.study_sets]
-            sets.forEach((setItem) => {
-              if (!uniqueSets.has(setItem.id)) uniqueSets.set(setItem.id, setItem)
-            })
-          })
-        })
-        setStudySets(Array.from(uniqueSets.values()).slice(0, 5))
-      }
-      // ---------------------------------------------------------
-
+      // --- LOGIC: FETCH HOC PHAN GAN DAY DUA TREN THOI GIAN TAO ---
       const { data: allSetsRows, error: allSetsError } = await supabase
         .from('study_sets')
         .select('id, title, description, created_at')
+        .eq('author_id', user.id)
         .order('created_at', { ascending: false })
 
       if (!cancelled) {
         if (allSetsError) setError(allSetsError.message)
-        setAllStudySets(allSetsRows ?? [])
+        const allSets = allSetsRows ?? []
+        setAllStudySets(allSets)
+
+        setStudySets(allSets.slice(0, 5))
       }
 
       // 2. Fetch Groups
@@ -558,3 +522,4 @@ export default function DashboardPage() {
     </div>
   )
 }
+
