@@ -15,12 +15,12 @@ function readRecentMap(): RecentMap {
     if (!raw) return {};
     const parsed = JSON.parse(raw) as unknown;
     if (!parsed || typeof parsed !== "object") return {};
-
-    return Object.fromEntries(
-      Object.entries(parsed as Record<string, unknown>).filter(
-        ([id, ts]) => id && typeof ts === "number" && Number.isFinite(ts),
-      ),
-    );
+    return Object.entries(parsed as Record<string, unknown>).reduce<RecentMap>((acc, [id, ts]) => {
+      if (id && typeof ts === "number" && Number.isFinite(ts)) {
+        acc[id] = ts;
+      }
+      return acc;
+    }, {});
   } catch {
     return {};
   }
