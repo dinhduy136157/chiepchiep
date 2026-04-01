@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
+import { sortSetsByRecentView } from '@/utils/recentSets'
 import { motion } from 'framer-motion'
 import AppHeader from '@/components/AppHeader'
 import { 
@@ -83,9 +84,10 @@ export default function DashboardPage() {
       if (!cancelled) {
         if (allSetsError) setError(allSetsError.message)
         const allSets = allSetsRows ?? []
+        const sortedSets = sortSetsByRecentView(allSets)
         setAllStudySets(allSets)
 
-        setStudySets(allSets.slice(0, 5))
+        setStudySets(sortedSets.slice(0, 5))
       }
 
       // 2. Fetch Groups

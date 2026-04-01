@@ -2,6 +2,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
+import { markSetViewed } from '@/utils/recentSets'
 import Link from 'next/link'
 import { motion, AnimatePresence, useMotionValue, useTransform } from 'framer-motion'
 import { 
@@ -104,6 +105,12 @@ export default function SetDetailPage() {
 
   const [showBulkModal, setShowBulkModal] = useState(false)
   const [bulkText, setBulkText] = useState('')
+
+  useEffect(() => {
+    const setId = Array.isArray(id) ? id[0] : id
+    if (!setId) return
+    markSetViewed(String(setId))
+  }, [id])
 
   useEffect(() => {
     const fetchData = async () => {
