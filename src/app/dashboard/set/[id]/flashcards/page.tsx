@@ -12,6 +12,9 @@ type Card = {
   definition: string;
 };
 
+const VOICE_STORAGE_KEY = "flashcards_voice_uri_v1";
+const VIETNAMESE_REGEX = /[ăâđêôơưáàảãạéèẻẽẹíìỉĩịóòỏõọúùủũụýỳỷỹỵ]/i;
+
 function SwipeCard({
   card,
   flipped,
@@ -153,6 +156,8 @@ export default function FlashcardsPage() {
   const [showToast, setShowToast] = useState<{ show: boolean; message: string; type: string }>({ show: false, message: "", type: "" });
   const [dragProgress, setDragProgress] = useState(0);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [voiceOptions, setVoiceOptions] = useState<SpeechSynthesisVoice[]>([]);
+  const [selectedVoiceURI, setSelectedVoiceURI] = useState("");
   
   const cardRef = useRef<HTMLDivElement>(null);
 
@@ -206,6 +211,35 @@ export default function FlashcardsPage() {
     }, 1500);
   }, []);
 
+  const scoreVoice = useCallback((voice: SpeechSynthesisVoice) => {
+    const name = voice.name.toLowerCase();
+    let score = 0;
+
+    if (name.includes("neural")) score += 4;
+    if (name.includes("natural")) score += 3;
+    if (name.includes("google")) score += 3;
+    if (name.includes("microsoft")) score += 2;
+    if (name.includes("online")) score += 2;
+    if (name.includes("premium")) score += 1;
+    if (voice.localService) score += 1;
+    if (voice.default) score += 1;
+
+    return score;
+  }, []);
+
+  const pickBestVoice = useCallback(
+    (voices: SpeechSynthesisVoice[], langPrefixes: string[]) => {
+      const byLang = voices.filter((voice) =>
+        langPrefixes.some((prefix) => voice.lang.toLowerCase().startsWith(prefix)),
+      );
+      const pool = byLang.length > 0 ? byLang : voices;
+      if (pool.length === 0) return null;
+
+      return [...pool].sort((a, b) => scoreVoice(b) - scoreVoice(a))[0];
+    },
+    [scoreVoice],
+  );
+
   const speakText = useCallback((text: string) => {
     const content = text.trim();
     if (!content) return;
@@ -221,12 +255,18 @@ export default function FlashcardsPage() {
     utterance.rate = 0.92;
     utterance.pitch = 1;
     utterance.volume = 1;
-    utterance.lang = /[ăâđêôơưáàảãạéèẻẽẹíìỉĩịóòỏõọúùủũụýỳỷỹỵ]/i.test(content) ? "vi-VN" : "en-US";
+    const isVietnamese = VIETNAMESE_REGEX.test(content);
+    const langOrder = isVietnamese ? ["vi", "en"] : ["en", "vi"];
+    const selectedVoice = voiceOptions.find((voice) => voice.voiceURI === selectedVoiceURI);
+    const fallbackVoice = pickBestVoice(voiceOptions, langOrder);
+    const voice = selectedVoice ?? fallbackVoice;
 
-    const voice = synth
-      .getVoices()
-      .find((item) => item.lang.toLowerCase().startsWith(utterance.lang.toLowerCase().slice(0, 2)));
-    if (voice) utterance.voice = voice;
+    if (voice) {
+      utterance.voice = voice;
+      utterance.lang = voice.lang;
+    } else {
+      utterance.lang = isVietnamese ? "vi-VN" : "en-US";
+    }
 
     utterance.onstart = () => setIsSpeaking(true);
     utterance.onend = () => setIsSpeaking(false);
@@ -236,7 +276,7 @@ export default function FlashcardsPage() {
     };
 
     synth.speak(utterance);
-  }, [showTemporaryToast]);
+  }, [pickBestVoice, selectedVoiceURI, showTemporaryToast, voiceOptions]);
 
   useEffect(() => {
     const load = async () => {
@@ -266,6 +306,46 @@ export default function FlashcardsPage() {
   useEffect(() => {
     return () => stopSpeaking();
   }, [stopSpeaking]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+
+    const synth = window.speechSynthesis;
+    const loadVoices = () => {
+      const voices = synth.getVoices();
+      const filtered = voices.filter((voice) => {
+        const lang = voice.lang.toLowerCase();
+        return lang.startsWith("vi") || lang.startsWith("en");
+      });
+      const usableVoices = filtered.length > 0 ? filtered : voices;
+      setVoiceOptions(usableVoices);
+
+      if (usableVoices.length === 0) return;
+
+      setSelectedVoiceURI((current) => {
+        if (current && usableVoices.some((voice) => voice.voiceURI === current)) {
+          return current;
+        }
+
+        const stored = window.localStorage.getItem(VOICE_STORAGE_KEY);
+        if (stored && usableVoices.some((voice) => voice.voiceURI === stored)) {
+          return stored;
+        }
+
+        const preferred = pickBestVoice(usableVoices, ["vi", "en"]);
+        return preferred?.voiceURI ?? usableVoices[0].voiceURI;
+      });
+    };
+
+    loadVoices();
+    synth.addEventListener("voiceschanged", loadVoices);
+    return () => synth.removeEventListener("voiceschanged", loadVoices);
+  }, [pickBestVoice]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !selectedVoiceURI) return;
+    window.localStorage.setItem(VOICE_STORAGE_KEY, selectedVoiceURI);
+  }, [selectedVoiceURI]);
 
   const markMastered = useCallback(
     async (cardId: number) => {
@@ -492,6 +572,24 @@ export default function FlashcardsPage() {
             Sau →
           </button>
         </div>
+
+        {voiceOptions.length > 0 && (
+          <div className="mt-4 flex items-center justify-end gap-2 text-xs text-slate-500">
+            <span>Giọng đọc:</span>
+            <select
+              value={selectedVoiceURI}
+              onChange={(e) => setSelectedVoiceURI(e.target.value)}
+              className="max-w-[240px] rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100"
+              aria-label="Chọn giọng đọc"
+            >
+              {voiceOptions.map((voice) => (
+                <option key={voice.voiceURI} value={voice.voiceURI}>
+                  {voice.name} ({voice.lang})
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         <div className="mt-6 text-center text-xs text-slate-400">
           💡 Quẹt phải để đánh dấu đã thuộc • Quẹt trái để học lại
