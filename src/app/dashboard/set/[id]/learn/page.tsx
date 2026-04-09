@@ -1,37 +1,72 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { createClient } from "@/utils/supabase/client"
-import { ArrowLeft, Sparkles } from "lucide-react"
+import { ArrowLeft, CheckCircle2, Sparkles, XCircle } from "lucide-react"
 import { motion } from "framer-motion"
 
+type Card = {
+  id: number
+  term: string
+  definition: string
+}
+
 export default function LearnPage() {
-  const { id } = useParams()
+  const params = useParams<{ id: string }>()
+  const setId = params.id
   const supabase = createClient()
   const router = useRouter()
 
-  const [cards, setCards] = useState<any[]>([])
+  const [cards, setCards] = useState<Card[]>([])
   const [currentIndex, setCurrentIndex] = useState(0)
   const [userInput, setUserInput] = useState("")
   const [status, setStatus] = useState<"idle" | "correct" | "wrong">("idle")
   const [isChecking, setIsChecking] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    const fetchCards = async () => {
-      const { data } = await supabase.from("cards").select("*").eq("set_id", id)
-      if (data) setCards(data)
+    let cancelled = false
+
+    const load = async () => {
+      setLoading(true)
+      setError(null)
+
+      const { data: cardRows, error: cardError } = await supabase
+        .from("cards")
+        .select("id, term, definition")
+        .eq("set_id", setId)
+        .order("id", { ascending: true })
+
+      if (cancelled) return
+      if (cardError) {
+        setError(cardError.message)
+        setLoading(false)
+        return
+      }
+
+      setCards((cardRows ?? []) as Card[])
+      setLoading(false)
     }
-    fetchCards()
-  }, [id, supabase])
+
+    load()
+    return () => {
+      cancelled = true
+    }
+  }, [setId, supabase])
+
+  const currentCard = cards[currentIndex]
+  const progress = useMemo(() => {
+    if (cards.length === 0) return 0
+    return Math.round(((currentIndex + 1) / cards.length) * 100)
+  }, [cards.length, currentIndex])
 
   const checkAnswer = async () => {
-    if (isChecking || cards.length === 0) return
-    const currentCard = cards[currentIndex]
-    if (!currentCard) return
+    if (isChecking || !currentCard) return
 
     setIsChecking(true)
-    const isRight = userInput.trim().toLowerCase() === currentCard.term.toLowerCase()
+    const isRight = userInput.trim().toLowerCase() === currentCard.term.trim().toLowerCase()
 
     if (isRight) {
       setStatus("correct")
@@ -42,6 +77,7 @@ export default function LearnPage() {
             user_id: authData.user.id,
             card_id: currentCard.id,
             status: "mastered",
+            last_reviewed: new Date().toISOString(),
           },
           { onConflict: "user_id, card_id" }
         )
@@ -53,11 +89,10 @@ export default function LearnPage() {
           setUserInput("")
           setStatus("idle")
           setIsChecking(false)
-        } else {
-          alert("Hoan thanh bo the!")
-          router.back()
+          return
         }
-      }, 900)
+        router.push(`/dashboard/set/${setId}`)
+      }, 650)
       return
     }
 
@@ -65,75 +100,162 @@ export default function LearnPage() {
     setIsChecking(false)
   }
 
-  useEffect(() => {
-    if (cards.length === 0 || status !== "idle" || isChecking) return
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-[#0b0f17] flex items-center justify-center text-slate-500 dark:text-slate-400">
+        Đang tải dữ liệu...
+      </div>
+    )
+  }
 
-    const currentTerm = cards[currentIndex]?.term?.trim().toLowerCase() ?? ""
-    const typed = userInput.trim().toLowerCase()
-    if (!typed || !currentTerm) return
+  if (error) {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-[#0b0f17] flex items-center justify-center p-6">
+        <div className="max-w-md w-full rounded-3xl bg-white dark:bg-slate-900 border border-red-200 dark:border-red-800 p-6 text-center">
+          <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+          <button
+            onClick={() => router.push(`/dashboard/set/${setId}`)}
+            className="mt-4 px-4 py-2 rounded-xl text-white text-sm font-semibold"
+            style={{ background: "linear-gradient(135deg, #4f46e5, #7c3aed)" }}
+          >
+            Quay lại bộ thẻ
+          </button>
+        </div>
+      </div>
+    )
+  }
 
-    const timer = setTimeout(() => {
-      // Auto-check when user likely finished typing.
-      if (typed.length >= currentTerm.length) {
-        checkAnswer()
-      }
-    }, 450)
-
-    return () => clearTimeout(timer)
-  }, [userInput, currentIndex, cards, status, isChecking])
-
-  if (cards.length === 0) {
-    return <div className="min-h-screen flex items-center justify-center text-slate-500">Loading...</div>
+  if (!currentCard) {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-[#0b0f17] flex items-center justify-center p-6">
+        <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-8 text-center">
+          <p className="text-sm text-slate-500 dark:text-slate-400">Bộ thẻ này chưa có nội dung.</p>
+          <button
+            onClick={() => router.push(`/dashboard/set/${setId}`)}
+            className="mt-4 px-4 py-2 rounded-xl text-white text-sm font-semibold"
+            style={{ background: "linear-gradient(135deg, #4f46e5, #7c3aed)" }}
+          >
+            Quay lại bộ thẻ
+          </button>
+        </div>
+      </div>
+    )
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/30 flex flex-col items-center p-6">
-      <div className="w-full max-w-3xl flex justify-between items-center mb-8">
-        <button
-          onClick={() => router.back()}
-          className="flex items-center gap-2 text-slate-500 font-semibold hover:text-slate-700"
+    <div className="min-h-screen bg-slate-50 dark:bg-[#0b0f17] pb-8">
+      <header className="sticky top-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-b border-slate-100 dark:border-slate-800">
+        <div className="max-w-lg mx-auto px-4">
+          <div className="h-14 flex items-center justify-between">
+            <button
+              onClick={() => router.push(`/dashboard/set/${setId}`)}
+              className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-300 active:scale-95 transition"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+            <h1
+              className="text-lg font-bold tracking-tight text-slate-800 dark:text-white"
+              style={{ fontFamily: "var(--font-display, sans-serif)" }}
+            >
+              Chế độ học
+            </h1>
+            <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800">
+              {currentIndex + 1}/{cards.length}
+            </div>
+          </div>
+          <div className="pb-3">
+            <div className="h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: `${progress}%` }}
+                transition={{ duration: 0.25 }}
+                className="h-full bg-gradient-to-r from-indigo-500 to-violet-500"
+              />
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-lg mx-auto px-4 pt-4 space-y-3">
+        <motion.section
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-100 dark:border-slate-800"
         >
-          <ArrowLeft className="w-4 h-4" /> Back
-        </button>
-        <div className="text-xs font-semibold text-slate-400 tracking-widest">
-          PROGRESS {currentIndex + 1} / {cards.length}
-        </div>
-      </div>
+          <div className="flex items-center justify-center gap-2 text-[11px] font-black uppercase tracking-[0.22em] text-indigo-500 mb-4">
+            <Sparkles className="w-3.5 h-3.5" />
+            Định nghĩa
+          </div>
+          <p className="text-center text-xl font-bold leading-relaxed text-slate-800 dark:text-white min-h-[96px] flex items-center justify-center">
+            {currentCard.definition}
+          </p>
+        </motion.section>
 
-      <div className="w-full max-w-3xl bg-white/80 backdrop-blur-sm rounded-[2.5rem] p-10 shadow-xl border border-slate-100 text-center">
-        <div className="flex items-center justify-center gap-2 text-xs font-black text-indigo-500 uppercase tracking-[0.35em] mb-8">
-          <Sparkles className="w-4 h-4" /> Definition
-        </div>
-        <p className="text-3xl font-bold text-slate-800 mb-12 leading-relaxed">
-          "{cards[currentIndex].definition}"
-        </p>
+        <motion.section
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.05 }}
+          className="bg-white dark:bg-slate-900 rounded-3xl p-4 border border-slate-100 dark:border-slate-800"
+        >
+          <input
+            autoFocus
+            value={userInput}
+            onChange={(e) => {
+              setUserInput(e.target.value)
+              setStatus("idle")
+            }}
+            onKeyDown={(e) => e.key === "Enter" && checkAnswer()}
+            disabled={isChecking && status === "correct"}
+            placeholder="Nhập thuật ngữ tương ứng..."
+            className={`w-full rounded-2xl border-2 px-4 py-4 text-center text-lg font-bold outline-none transition ${
+              status === "correct"
+                ? "border-emerald-500 bg-emerald-50 text-emerald-700"
+                : status === "wrong"
+                ? "border-rose-500 bg-rose-50 text-rose-700"
+                : "border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-100 focus:border-indigo-400"
+            }`}
+          />
 
-        <input
-          autoFocus
-          value={userInput}
-          onChange={(e) => {
-            setUserInput(e.target.value)
-            setStatus("idle")
-          }}
-          onKeyDown={(e) => e.key === "Enter" && checkAnswer()}
-          disabled={isChecking && status === "correct"}
-          className={`w-full p-6 rounded-2xl border-2 text-center text-2xl font-black transition-all outline-none ${
-            status === "correct"
-              ? "border-emerald-500 bg-emerald-50 text-emerald-700"
-              : status === "wrong"
-                ? "border-red-400 bg-red-50 text-red-700"
-                : "border-slate-100 bg-slate-50 focus:border-indigo-500"
-          }`}
-          placeholder="Type the term..."
-        />
+          {status === "wrong" && (
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="mt-3 text-center text-sm text-emerald-600 dark:text-emerald-400 font-semibold"
+            >
+              Gợi ý: {currentCard.term}
+            </motion.p>
+          )}
 
-        {status === "wrong" && (
-          <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-4 text-emerald-600 font-bold italic">
-            Hint: {cards[currentIndex].term}
-          </motion.p>
-        )}
-      </div>
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <button
+              onClick={() => router.push(`/dashboard/set/${setId}`)}
+              className="rounded-xl border border-slate-200 dark:border-slate-700 py-2.5 text-sm font-semibold text-slate-600 dark:text-slate-300"
+            >
+              Thoát
+            </button>
+            <button
+              onClick={checkAnswer}
+              disabled={isChecking || !userInput.trim()}
+              className="rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+              style={{ background: "linear-gradient(135deg, #4f46e5, #7c3aed)" }}
+            >
+              {status === "correct" ? (
+                <span className="inline-flex items-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4" />
+                  Chính xác
+                </span>
+              ) : status === "wrong" ? (
+                <span className="inline-flex items-center gap-1.5">
+                  <XCircle className="w-4 h-4" />
+                  Thử lại
+                </span>
+              ) : (
+                "Kiểm tra"
+              )}
+            </button>
+          </div>
+        </motion.section>
+      </main>
     </div>
   )
 }
-

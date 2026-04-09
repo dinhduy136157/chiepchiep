@@ -1,165 +1,254 @@
 "use client"
-import { useEffect, useState, useCallback } from 'react'
-import { useParams, useRouter } from 'next/navigation'
-import { createClient } from '@/utils/supabase/client'
-import { ArrowLeft, Timer, Trophy } from 'lucide-react'
-import { motion, AnimatePresence } from 'framer-motion'
+
+import { useEffect, useMemo, useState } from "react"
+import { useParams, useRouter } from "next/navigation"
+import { createClient } from "@/utils/supabase/client"
+import { motion } from "framer-motion"
+import { ArrowLeft, Clock3, Trophy } from "lucide-react"
+
+type Card = {
+  id: number
+  term: string
+  definition: string
+}
+
+type MatchItem = {
+  gameId: string
+  cardId: number
+  content: string
+  type: "term" | "definition"
+}
+
+function shuffleArray<T>(array: T[]) {
+  return [...array].sort(() => Math.random() - 0.5)
+}
 
 export default function MatchGamePage() {
-  const { id } = useParams()
+  const params = useParams<{ id: string }>()
+  const setId = params.id
   const supabase = createClient()
   const router = useRouter()
 
-  const [gameCards, setGameCards] = useState<any[]>([])
-  const [selected, setSelected] = useState<any[]>([])
-  const [matched, setMatched] = useState<number[]>([]) // Chuyển về lưu number ID
+  const [gameCards, setGameCards] = useState<MatchItem[]>([])
+  const [selected, setSelected] = useState<MatchItem[]>([])
+  const [matchedCardIds, setMatchedCardIds] = useState<number[]>([])
   const [time, setTime] = useState(0)
   const [isFinished, setIsFinished] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [isWrong, setIsWrong] = useState(false) // Hiệu ứng chọn sai
-
-  const shuffleArray = (array: any[]) => [...array].sort(() => Math.random() - 0.5)
+  const [error, setError] = useState<string | null>(null)
+  const [isWrong, setIsWrong] = useState(false)
 
   useEffect(() => {
-    const fetchAndPrepare = async () => {
-      const { data } = await supabase.from('cards').select('*').eq('set_id', id).limit(6)
-      if (data && data.length >= 3) {
-        const terms = data.map(c => ({ gameId: Math.random(), id: c.id, content: c.term, type: 'term' }))
-        const defs = data.map(c => ({ gameId: Math.random(), id: c.id, content: c.definition, type: 'definition' }))
-        setGameCards(shuffleArray([...terms, ...defs]))
-      } else {
-        alert("Duy cần ít nhất 3 thẻ để chơi trò này!")
-        router.back()
+    let cancelled = false
+
+    const load = async () => {
+      setLoading(true)
+      setError(null)
+
+      const { data, error: cardError } = await supabase
+        .from("cards")
+        .select("id, term, definition")
+        .eq("set_id", setId)
+        .limit(8)
+
+      if (cancelled) return
+      if (cardError) {
+        setError(cardError.message)
+        setLoading(false)
+        return
       }
+
+      const rows = (data ?? []) as Card[]
+      if (rows.length < 3) {
+        setError("Bạn cần ít nhất 3 thẻ để chơi trò ghép cặp.")
+        setLoading(false)
+        return
+      }
+
+      const terms: MatchItem[] = rows.map((c) => ({
+        gameId: `t-${c.id}-${Math.random().toString(36).slice(2, 8)}`,
+        cardId: c.id,
+        content: c.term,
+        type: "term",
+      }))
+      const defs: MatchItem[] = rows.map((c) => ({
+        gameId: `d-${c.id}-${Math.random().toString(36).slice(2, 8)}`,
+        cardId: c.id,
+        content: c.definition,
+        type: "definition",
+      }))
+
+      setGameCards(shuffleArray([...terms, ...defs]))
       setLoading(false)
     }
-    fetchAndPrepare()
-  }, [id, supabase, router])
+
+    load()
+    return () => {
+      cancelled = true
+    }
+  }, [setId, supabase])
 
   useEffect(() => {
-    let interval: any
-    if (!isFinished && !loading) {
-      interval = setInterval(() => setTime(prev => prev + 0.1), 100)
-    }
+    if (loading || isFinished) return
+    const interval = setInterval(() => setTime((prev) => prev + 0.1), 100)
     return () => clearInterval(interval)
   }, [isFinished, loading])
 
-  const handleSelect = (card: any) => {
-    // Không cho chọn nếu đã match, hoặc đang trong hiệu ứng "sai", hoặc chọn lại chính nó
-    if (matched.includes(card.id) || isWrong || selected.some(s => s.gameId === card.gameId)) return
+  const totalPairs = useMemo(() => gameCards.length / 2, [gameCards.length])
 
-    const newSelected = [...selected, card]
-    setSelected(newSelected)
+  const handleSelect = (card: MatchItem) => {
+    if (matchedCardIds.includes(card.cardId) || isWrong) return
+    if (selected.some((s) => s.gameId === card.gameId)) return
 
-    if (newSelected.length === 2) {
-      const [first, second] = newSelected
-      
-      if (first.id === second.id && first.type !== second.type) {
-        // ĐÚNG CẶP
-        setTimeout(() => {
-          const newMatched = [...matched, first.id]
-          setMatched(newMatched)
-          setSelected([])
-          if (newMatched.length === gameCards.length / 2) {
-            setIsFinished(true)
-          }
-        }, 200)
-      } else {
-        // SAI CẶP
-        setIsWrong(true)
-        setTimeout(() => {
-          setSelected([])
-          setIsWrong(false)
-        }, 600)
-      }
+    const nextSelected = [...selected, card]
+    setSelected(nextSelected)
+
+    if (nextSelected.length !== 2) return
+
+    const [first, second] = nextSelected
+    if (first.cardId === second.cardId && first.type !== second.type) {
+      setTimeout(() => {
+        const nextMatched = [...matchedCardIds, first.cardId]
+        setMatchedCardIds(nextMatched)
+        setSelected([])
+        if (nextMatched.length === totalPairs) {
+          setIsFinished(true)
+        }
+      }, 180)
+      return
     }
+
+    setIsWrong(true)
+    setTimeout(() => {
+      setSelected([])
+      setIsWrong(false)
+    }, 520)
   }
 
-  if (loading) return (
-    <div className="min-h-screen flex items-center justify-center bg-white">
-      <div className="text-center font-black text-emerald-600 animate-bounce text-2xl tracking-tighter italic">DUYVOCAB MATCH...</div>
-    </div>
-  )
+  const restart = () => {
+    window.location.reload()
+  }
 
-  if (isFinished) return (
-    <div className="min-h-screen bg-slate-900 flex items-center justify-center p-6">
-      <motion.div initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white rounded-[3rem] p-12 text-center shadow-2xl border-4 border-emerald-400 max-w-md w-full">
-        <Trophy className="w-20 h-20 text-amber-400 mx-auto mb-6 animate-bounce" />
-        <h2 className="text-4xl font-black text-slate-800 mb-2 italic tracking-tighter uppercase">Xuất sắc!</h2>
-        <p className="text-slate-500 mb-8 font-bold text-lg">Hoàn thành trong <span className="text-emerald-600 text-3xl block mt-2">{time.toFixed(1)} giây</span></p>
-        <div className="flex flex-col gap-3">
-          <button onClick={() => window.location.reload()} className="w-full py-5 bg-emerald-600 text-white rounded-2xl font-black shadow-xl hover:bg-slate-800 transition-all uppercase tracking-widest active:scale-95">Chơi lại ↻</button>
-          <button onClick={() => router.back()} className="w-full py-4 text-slate-400 font-bold hover:text-slate-600 transition-colors uppercase text-xs tracking-widest">Quay lại học phần</button>
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-[#0b0f17] flex items-center justify-center text-slate-500 dark:text-slate-400">
+        Đang chuẩn bị trò chơi...
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-[#0b0f17] flex items-center justify-center p-6">
+        <div className="max-w-md w-full rounded-3xl border border-red-200 dark:border-red-800 bg-white dark:bg-slate-900 p-6 text-center">
+          <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+          <button
+            onClick={() => router.push(`/dashboard/set/${setId}`)}
+            className="mt-4 px-4 py-2 rounded-xl text-white text-sm font-semibold"
+            style={{ background: "linear-gradient(135deg, #4f46e5, #7c3aed)" }}
+          >
+            Quay lại bộ thẻ
+          </button>
         </div>
-      </motion.div>
-    </div>
-  )
+      </div>
+    )
+  }
+
+  if (isFinished) {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-[#0b0f17] flex items-center justify-center p-6">
+        <motion.div
+          initial={{ scale: 0.9, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-8 text-center"
+        >
+          <Trophy className="w-16 h-16 text-amber-500 mx-auto mb-4" />
+          <h2 className="text-2xl font-black text-slate-800 dark:text-white">Hoàn thành ghép cặp</h2>
+          <p className="text-slate-500 dark:text-slate-400 mt-2">
+            Bạn đã ghép đúng trong <span className="font-bold text-indigo-600 dark:text-indigo-400">{time.toFixed(1)} giây</span>
+          </p>
+          <div className="mt-6 grid grid-cols-2 gap-2">
+            <button
+              onClick={restart}
+              className="rounded-xl py-2.5 text-white text-sm font-semibold"
+              style={{ background: "linear-gradient(135deg, #4f46e5, #7c3aed)" }}
+            >
+              Chơi lại
+            </button>
+            <button
+              onClick={() => router.push(`/dashboard/set/${setId}`)}
+              className="rounded-xl py-2.5 border border-slate-200 dark:border-slate-700 text-sm font-semibold text-slate-600 dark:text-slate-300"
+            >
+              Về bộ thẻ
+            </button>
+          </div>
+        </motion.div>
+      </div>
+    )
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/30 p-6 flex flex-col items-center">
-      <div className="w-full max-w-5xl flex justify-between items-center mb-10">
-        <button onClick={() => router.back()} className="flex items-center gap-2 text-slate-500 font-bold hover:text-emerald-600 transition-colors bg-white px-4 py-2 rounded-xl shadow-sm border border-slate-100 dark:bg-slate-900/70 dark:text-slate-200 dark:border-slate-700">
-          <ArrowLeft className="w-4 h-4" /> Thoát
-        </button>
-        <div className="flex items-center gap-3 bg-white px-6 py-3 rounded-2xl shadow-md border border-emerald-100 dark:bg-slate-900/70 dark:border-slate-700">
-          <Timer className="w-5 h-5 text-emerald-500" />
-          <span className="font-mono text-2xl font-black text-slate-700 w-16 text-center dark:text-slate-100">{time.toFixed(1)}</span>
+    <div className="min-h-screen bg-slate-50 dark:bg-[#0b0f17] pb-6">
+      <header className="sticky top-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-b border-slate-100 dark:border-slate-800">
+        <div className="max-w-2xl mx-auto px-4">
+          <div className="h-14 flex items-center justify-between">
+            <button
+              onClick={() => router.push(`/dashboard/set/${setId}`)}
+              className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-300"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+            <h1 className="text-lg font-bold text-slate-800 dark:text-white">Ghép cặp</h1>
+            <div className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+              <Clock3 className="w-3.5 h-3.5 text-emerald-500" />
+              {time.toFixed(1)}s
+            </div>
+          </div>
+          <div className="pb-3">
+            <div className="h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: `${(matchedCardIds.length / totalPairs) * 100}%` }}
+                className="h-full bg-gradient-to-r from-emerald-500 to-indigo-500"
+              />
+            </div>
+          </div>
         </div>
-      </div>
+      </header>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 w-full max-w-5xl">
-        <AnimatePresence>
+      <main className="max-w-2xl mx-auto px-4 pt-4">
+        <p className="text-center text-xs text-slate-500 dark:text-slate-400 mb-3">
+          Chạm 2 ô để ghép thuật ngữ với định nghĩa tương ứng
+        </p>
+
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           {gameCards.map((card) => {
-            const isSelected = selected.some(s => s.gameId === card.gameId)
-            const isMatched = matched.includes(card.id)
+            const isSelected = selected.some((s) => s.gameId === card.gameId)
+            const isMatched = matchedCardIds.includes(card.cardId)
 
             return (
-              <motion.div
+              <motion.button
                 key={card.gameId}
                 layout
-                initial={{ scale: 0, opacity: 0 }}
-                animate={{ 
-                  scale: 1, 
-                  opacity: 1,
-                  x: isWrong && isSelected ? [0, -10, 10, -10, 10, 0] : 0 // Shake nếu sai
-                }}
-                exit={{ scale: 0, opacity: 0, transition: { duration: 0.2 } }}
-                whileHover={{ y: -5 }}
-                whileTap={{ scale: 0.95 }}
+                whileTap={{ scale: 0.98 }}
                 onClick={() => handleSelect(card)}
-                className={`h-32 md:h-44 p-4 rounded-[2rem] flex items-center justify-center text-center cursor-pointer transition-all border-4 shadow-sm font-bold text-sm md:text-lg leading-tight overflow-hidden select-none ${
+                disabled={isMatched}
+                className={`h-28 rounded-2xl px-3 text-sm font-semibold text-center border transition ${
                   isMatched
-                    ? 'opacity-0 pointer-events-none invisible'
-                    : isSelected 
-                    ? isWrong 
-                      ? 'border-rose-500 bg-rose-50 text-rose-700 shadow-rose-100 dark:bg-rose-500/20 dark:text-rose-100' // Màu đỏ khi sai
-                      : 'border-indigo-500 bg-indigo-50 text-indigo-700 shadow-indigo-100 dark:bg-indigo-500/20 dark:text-indigo-100' // Màu xanh dương khi chọn
-                    : 'border-white bg-white/90 backdrop-blur-sm hover:border-emerald-200 text-slate-700 shadow-xl shadow-slate-200/50 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100 dark:shadow-none'
+                    ? "opacity-0 pointer-events-none"
+                    : isSelected
+                    ? isWrong
+                      ? "border-rose-400 bg-rose-50 text-rose-700"
+                      : "border-indigo-400 bg-indigo-50 text-indigo-700"
+                    : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-100"
                 }`}
-                style={{
-                  backgroundImage:
-                    "linear-gradient(to bottom, rgba(15,23,42,0.35), rgba(15,23,42,0.55)), url('/avatars/avatar-anh-meo-cute-5.jpg')",
-                  backgroundSize: 'cover',
-                  backgroundPosition: 'center',
-                }}
               >
-                <span className="px-2 py-1 rounded-lg bg-white/70 dark:bg-slate-900/70 backdrop-blur text-slate-800 dark:text-slate-100">
-                  {card.content}
-                </span>
-              </motion.div>
+                {card.content}
+              </motion.button>
             )
           })}
-        </AnimatePresence>
-      </div>
-
-      <div className="mt-16 text-center">
-        <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.3em] italic bg-slate-100/50 px-6 py-2 rounded-full inline-block">
-          Ghép thuật ngữ với định nghĩa đúng để chúng biến mất!
-        </p>
-      </div>
+        </div>
+      </main>
     </div>
   )
 }
-
-
-

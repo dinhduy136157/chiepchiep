@@ -383,7 +383,14 @@ export default function FlashcardsPage() {
     stopSpeaking();
     setIndex((prev) => (prev + 1) % cards.length);
     setFlipped(false);
-    // Hiệu ứng rung nhẹ khi chuyển thẻ
+    triggerHapticEffect("light");
+  }, [cards.length, stopSpeaking, triggerHapticEffect]);
+
+  const prevCard = useCallback(() => {
+    if (cards.length === 0) return;
+    stopSpeaking();
+    setIndex((prev) => (prev - 1 + cards.length) % cards.length);
+    setFlipped(false);
     triggerHapticEffect("light");
   }, [cards.length, stopSpeaking, triggerHapticEffect]);
 
@@ -453,7 +460,7 @@ export default function FlashcardsPage() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/30 pb-8">
       {/* Header */}
       <div className="sticky top-0 z-20 border-b border-slate-200/70 bg-white/85 backdrop-blur-md">
-        <div className="mx-auto flex w-full max-w-5xl items-center justify-between px-4 py-3 md:px-6">
+        <div className="mx-auto flex w-full max-w-4xl items-center justify-between px-4 py-3 md:px-6">
           <button
             onClick={() => router.push(`/dashboard/set/${id}`)}
             className="flex items-center gap-2 text-sm font-bold text-slate-500 transition hover:text-slate-700"
@@ -503,7 +510,7 @@ export default function FlashcardsPage() {
         )}
       </AnimatePresence>
 
-      <main className="mx-auto w-full max-w-5xl px-4 pt-6 md:px-6 md:pt-10">
+      <main className="mx-auto w-full max-w-4xl px-4 pt-6 md:px-6 md:pt-10">
         <div className="mb-5 flex items-center justify-between px-1 text-sm font-semibold text-slate-500">
           <span>
             Thẻ {index + 1}/{cards.length}
@@ -529,10 +536,10 @@ export default function FlashcardsPage() {
           </AnimatePresence>
         </div>
 
-        <div className="mt-6 grid grid-cols-4 gap-3 md:mt-8 md:gap-4">
+        <div className="mt-6 grid grid-cols-2 gap-3 md:mt-8 md:grid-cols-4 md:gap-4">
           <button
             onClick={() => {
-              nextCard();
+              prevCard();
               triggerHapticEffect("light");
             }}
             className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-600 shadow-sm transition hover:border-slate-300 active:scale-95"
@@ -622,3 +629,4 @@ export default function FlashcardsPage() {
     </div>
   );
 }
+

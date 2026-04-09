@@ -4,18 +4,59 @@ import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/utils/supabase/client"
-import AppHeader from "@/components/AppHeader"
-import { BookOpen, Plus, Search, Trash2, ChevronRight } from "lucide-react"
+import { motion } from "framer-motion"
+import {
+  ArrowLeft,
+  BookOpen,
+  ChevronRight,
+  Home,
+  Library,
+  Plus,
+  Search,
+  Trash2,
+  UserCircle2,
+  Users,
+} from "lucide-react"
 
 type StudySet = {
-  id: number
+  id: string
   title: string
   description: string | null
   created_at: string
 }
 
 type CardRow = {
-  set_id: number
+  set_id: string
+}
+
+function BottomNav() {
+  const items = [
+    { key: "home", icon: Home, label: "Trang chủ", href: "/dashboard" },
+    { key: "sets", icon: Library, label: "Học phần", href: "/dashboard/sets" },
+    { key: "groups", icon: Users, label: "Nhóm", href: "/dashboard/groups" },
+    { key: "profile", icon: UserCircle2, label: "Hồ sơ", href: "/dashboard/profile" },
+  ] as const
+
+  return (
+    <nav className="fixed bottom-0 left-0 right-0 z-50 flex bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-t border-slate-100 dark:border-slate-800 pb-safe">
+      {items.map((item) => {
+        const isActive = item.key === "sets"
+        const Icon = item.icon
+        return (
+          <Link key={item.key} href={item.href} className="flex-1">
+            <div className={`flex flex-col items-center gap-1 py-2.5 transition-all duration-150 ${isActive ? "" : "opacity-50"}`}>
+              <div className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all ${isActive ? "bg-indigo-100 dark:bg-indigo-900/50" : ""}`}>
+                <Icon className={`w-[18px] h-[18px] ${isActive ? "text-indigo-600 dark:text-indigo-400" : "text-slate-500 dark:text-slate-400"}`} />
+              </div>
+              <span className={`text-[10px] font-semibold ${isActive ? "text-indigo-600 dark:text-indigo-400" : "text-slate-400 dark:text-slate-500"}`}>
+                {item.label}
+              </span>
+            </div>
+          </Link>
+        )
+      })}
+    </nav>
+  )
 }
 
 export default function SetsManagementPage() {
@@ -23,13 +64,11 @@ export default function SetsManagementPage() {
   const router = useRouter()
 
   const [loading, setLoading] = useState(true)
-  const [deletingId, setDeletingId] = useState<number | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [sets, setSets] = useState<StudySet[]>([])
-  const [cardCountBySet, setCardCountBySet] = useState<Record<number, number>>({})
+  const [cardCountBySet, setCardCountBySet] = useState<Record<string, number>>({})
   const [searchTerm, setSearchTerm] = useState("")
-  const [userName, setUserName] = useState("User")
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -38,22 +77,12 @@ export default function SetsManagementPage() {
       setLoading(true)
       setError(null)
 
-      const { data: authData } = await supabase.auth.getUser()
-      const user = authData.user
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
       if (!user) {
-        router.push("/auth/login")
+        router.replace("/auth/login")
         return
-      }
-
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("username, avatar_url")
-        .eq("id", user.id)
-        .single()
-
-      if (!cancelled && profile) {
-        setUserName(profile.username || user.email?.split("@")[0] || "User")
-        setAvatarUrl(profile.avatar_url)
       }
 
       const { data: setRows, error: setRowsError } = await supabase
@@ -91,7 +120,7 @@ export default function SetsManagementPage() {
         if (cardError) {
           setError(cardError.message)
         } else {
-          const counts: Record<number, number> = {}
+          const counts: Record<string, number> = {}
           ;((cardRows ?? []) as CardRow[]).forEach((row) => {
             counts[row.set_id] = (counts[row.set_id] ?? 0) + 1
           })
@@ -117,8 +146,8 @@ export default function SetsManagementPage() {
     })
   }, [sets, searchTerm])
 
-  const handleDelete = async (setId: number) => {
-    const ok = window.confirm("Delete this study set? This action cannot be undone.")
+  const handleDelete = async (setId: string) => {
+    const ok = window.confirm("Bạn có chắc muốn xóa học phần này không? Hành động này không thể hoàn tác.")
     if (!ok) return
 
     setDeletingId(setId)
@@ -139,105 +168,152 @@ export default function SetsManagementPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/30">
-      <AppHeader pageTitle="Manage Study Sets" avatarUrl={avatarUrl} userName={userName} />
-
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
-          <div>
-            <h1 className="text-3xl font-bold text-slate-800">All My Study Sets</h1>
-            <p className="text-slate-500 mt-1">Create, open, and clean up your learning library.</p>
-          </div>
-          <Link
-            href="/dashboard/create"
-            className="inline-flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl font-semibold shadow-lg shadow-indigo-500/20"
-          >
-            <Plus className="w-4 h-4" />
-            New Study Set
-          </Link>
-        </div>
-
-        <div className="mb-6 bg-white rounded-2xl border border-slate-200 p-3 flex items-center gap-3">
-          <Search className="w-4 h-4 text-slate-400" />
-          <input
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search your sets..."
-            className="w-full bg-transparent outline-none text-slate-700 placeholder:text-slate-400"
-          />
-        </div>
-
-        {error && (
-          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
-            {error}
-          </div>
-        )}
-
-        {loading ? (
-          <div className="grid gap-3">
-            {[...Array(4)].map((_, idx) => (
-              <div key={idx} className="animate-pulse bg-white rounded-xl border border-slate-200 p-5">
-                <div className="h-5 bg-slate-200 rounded w-1/3 mb-3"></div>
-                <div className="h-4 bg-slate-100 rounded w-2/3"></div>
-              </div>
-            ))}
-          </div>
-        ) : filteredSets.length === 0 ? (
-          <div className="bg-white rounded-2xl border-2 border-dashed border-slate-200 p-12 text-center">
-            <BookOpen className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-            <h2 className="text-lg font-semibold text-slate-700 mb-2">No study set found</h2>
-            <p className="text-sm text-slate-500 mb-4">Try another keyword, or create a new set.</p>
-            <Link
-              href="/dashboard/create"
-              className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg"
-            >
-              <Plus className="w-4 h-4" />
-              Create Set
-            </Link>
-          </div>
-        ) : (
-          <div className="grid gap-3">
-            {filteredSets.map((setItem) => (
-              <div
-                key={setItem.id}
-                className="bg-white rounded-2xl border border-slate-200 p-5 hover:border-indigo-200 transition-all"
+    <>
+      <div className="min-h-screen bg-slate-50 dark:bg-[#0b0f17] pb-[90px]">
+        <header className="sticky top-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-b border-slate-100 dark:border-slate-800">
+          <div className="max-w-lg mx-auto px-4">
+            <div className="h-14 flex items-center justify-between">
+              <Link
+                href="/dashboard"
+                className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-300 active:scale-95 transition"
               >
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                  <div className="min-w-0">
-                    <h3 className="text-lg font-semibold text-slate-800 truncate">{setItem.title}</h3>
-                    <p className="text-sm text-slate-500 line-clamp-2 mt-1">
-                      {setItem.description || "No description"}
-                    </p>
-                    <div className="mt-2 text-xs text-slate-400 flex items-center gap-3">
-                      <span>{cardCountBySet[setItem.id] ?? 0} cards</span>
-                      <span>{new Date(setItem.created_at).toLocaleDateString("vi-VN")}</span>
+                <ArrowLeft className="w-4 h-4" />
+              </Link>
+              <h1
+                className="text-xl font-bold tracking-tight"
+                style={{
+                  fontFamily: "var(--font-display, sans-serif)",
+                  background: "linear-gradient(135deg, #4f46e5, #7c3aed)",
+                  WebkitBackgroundClip: "text",
+                  WebkitTextFillColor: "transparent",
+                }}
+              >
+                Học phần của tôi
+              </h1>
+              <Link
+                href="/dashboard/create"
+                className="h-9 px-3 rounded-xl text-white text-sm font-semibold inline-flex items-center gap-1.5 active:scale-95 transition"
+                style={{ background: "linear-gradient(135deg, #4f46e5, #7c3aed)" }}
+              >
+                <Plus className="w-4 h-4" />
+                Tạo mới
+              </Link>
+            </div>
+            <div className="pb-3">
+              <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 rounded-xl px-3 py-2.5">
+                <Search className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                <input
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Tìm học phần..."
+                  className="bg-transparent border-none outline-none text-sm text-slate-700 dark:text-slate-200 w-full placeholder:text-slate-400"
+                />
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <main className="max-w-lg mx-auto px-4 pt-4 space-y-3">
+          {error && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="rounded-2xl border border-red-200 bg-red-50 dark:bg-red-900/20 dark:border-red-800 px-4 py-3 text-sm text-red-600 dark:text-red-400"
+            >
+              {error}
+            </motion.div>
+          )}
+
+          {loading ? (
+            <div className="space-y-2">
+              {[...Array(4)].map((_, idx) => (
+                <div
+                  key={idx}
+                  className="animate-pulse rounded-2xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 p-4"
+                >
+                  <div className="h-4 bg-slate-100 dark:bg-slate-800 rounded w-1/2 mb-3" />
+                  <div className="h-3 bg-slate-100 dark:bg-slate-800 rounded w-2/3 mb-2" />
+                  <div className="h-3 bg-slate-100 dark:bg-slate-800 rounded w-1/3" />
+                </div>
+              ))}
+            </div>
+          ) : filteredSets.length === 0 ? (
+            <motion.section
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-white dark:bg-slate-900 rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-700 p-8 text-center"
+            >
+              <div className="w-14 h-14 rounded-2xl bg-indigo-50 dark:bg-indigo-950 flex items-center justify-center mx-auto mb-3">
+                <BookOpen className="w-7 h-7 text-indigo-400" />
+              </div>
+              <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-1">
+                Không tìm thấy học phần
+              </h2>
+              <p className="text-xs text-slate-400 mb-4">
+                Thử từ khóa khác hoặc tạo học phần mới.
+              </p>
+              <Link
+                href="/dashboard/create"
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-white text-sm font-semibold"
+                style={{ background: "linear-gradient(135deg, #4f46e5, #7c3aed)" }}
+              >
+                <Plus className="w-4 h-4" />
+                Tạo học phần
+              </Link>
+            </motion.section>
+          ) : (
+            <div className="space-y-2">
+              {filteredSets.map((setItem, index) => (
+                <motion.div
+                  key={setItem.id}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.03 }}
+                  className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 p-4"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="w-11 h-11 rounded-xl bg-indigo-50 dark:bg-indigo-950 flex items-center justify-center text-xl flex-shrink-0">
+                      📘
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-sm font-semibold text-slate-800 dark:text-white truncate">
+                        {setItem.title}
+                      </h3>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-2">
+                        {setItem.description || "Chưa có mô tả."}
+                      </p>
+                      <div className="mt-2 text-[11px] text-slate-400 dark:text-slate-500 flex items-center gap-3">
+                        <span>{cardCountBySet[setItem.id] ?? 0} thẻ</span>
+                        <span>{new Date(setItem.created_at).toLocaleDateString("vi-VN")}</span>
+                      </div>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="mt-3 flex items-center gap-2">
                     <Link
                       href={`/dashboard/set/${setItem.id}`}
-                      className="inline-flex items-center gap-1 px-3 py-2 text-sm rounded-lg border border-slate-200 text-slate-700 hover:border-indigo-300 hover:text-indigo-600"
+                      className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:border-indigo-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
                     >
-                      Open
+                      Mở
                       <ChevronRight className="w-4 h-4" />
                     </Link>
-
                     <button
                       onClick={() => handleDelete(setItem.id)}
                       disabled={deletingId === setItem.id}
-                      className="inline-flex items-center gap-1 px-3 py-2 text-sm rounded-lg border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-50"
+                      className="inline-flex items-center justify-center gap-1 px-3 py-2 text-sm rounded-xl border border-red-200 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50"
                     >
                       <Trash2 className="w-4 h-4" />
-                      {deletingId === setItem.id ? "Deleting..." : "Delete"}
+                      {deletingId === setItem.id ? "Đang xóa..." : "Xóa"}
                     </button>
                   </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </main>
-    </div>
+                </motion.div>
+              ))}
+            </div>
+          )}
+        </main>
+      </div>
+
+      <BottomNav />
+    </>
   )
 }
