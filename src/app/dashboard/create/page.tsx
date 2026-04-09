@@ -1,315 +1,314 @@
-'use client'
-import { useEffect, useMemo, useState } from 'react'
-import { createClient } from '@/utils/supabase/client'
-import { useRouter } from 'next/navigation'
-import Link from 'next/link'
-import { motion } from 'framer-motion'
-import AppHeader from '@/components/AppHeader'
-import { 
-  ArrowLeft, 
-  Plus, 
-  Trash2, 
-  Save,
-  BookOpen,
-  Sparkles,
-  HelpCircle
-} from 'lucide-react'
+"use client"
 
-type CardInput = { term: string; definition: string }
+import { useEffect, useMemo, useState } from "react"
+import Link from "next/link"
+import { useRouter } from "next/navigation"
+import { createClient } from "@/utils/supabase/client"
+import { motion } from "framer-motion"
+import {
+  ArrowLeft,
+  BookOpen,
+  CheckCircle2,
+  HelpCircle,
+  Plus,
+  Save,
+  Trash2,
+} from "lucide-react"
+
+type CardInput = {
+  term: string
+  definition: string
+}
+
+function progressPercent(total: number, valid: number) {
+  if (!total) return 0
+  return Math.min(100, Math.round((valid / total) * 100))
+}
 
 export default function CreateSetPage() {
-  const [title, setTitle] = useState('')
-  const [description, setDescription] = useState('')
-  const [cards, setCards] = useState<CardInput[]>([{ term: '', definition: '' }])
-  const [saving, setSaving] = useState(false)
-  const [userName, setUserName] = useState<string>("Duy")
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
-
   const supabase = createClient()
   const router = useRouter()
 
+  const [title, setTitle] = useState("")
+  const [description, setDescription] = useState("")
+  const [cards, setCards] = useState<CardInput[]>([{ term: "", definition: "" }])
+
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
   useEffect(() => {
-    const getProfile = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
+    let cancelled = false
 
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('username, avatar_url')
-        .eq('id', user.id)
-        .single()
+    const checkSession = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
 
-      if (profile) {
-        setUserName(profile.username || user.email?.split('@')[0] || "Duy")
-        setAvatarUrl(profile.avatar_url)
-      } else if (user.email) {
-        setUserName(user.email.split('@')[0] || "Duy")
+      if (!user) {
+        router.replace("/auth/login")
+        return
       }
-    }
-    getProfile()
-  }, [supabase])
 
-  const addRow = () => setCards([...cards, { term: '', definition: '' }])
-  const removeRow = (index: number) => {
-    if (cards.length === 1) return
-    setCards(cards.filter((_, i) => i !== index))
+      if (!cancelled) setLoading(false)
+    }
+
+    checkSession()
+    return () => {
+      cancelled = true
+    }
+  }, [router, supabase])
+
+  const filledCards = useMemo(
+    () => cards.filter((card) => card.term.trim() && card.definition.trim()),
+    [cards]
+  )
+
+  const percent = useMemo(
+    () => progressPercent(cards.length, filledCards.length),
+    [cards.length, filledCards.length]
+  )
+
+  const addRow = () => {
+    setCards((prev) => [...prev, { term: "", definition: "" }])
   }
 
-  const filledCards = useMemo(() => {
-    return cards.filter((card) => card.term.trim() && card.definition.trim())
-  }, [cards])
+  const removeRow = (index: number) => {
+    if (cards.length === 1) return
+    setCards((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  const updateCard = (index: number, field: keyof CardInput, value: string) => {
+    setCards((prev) =>
+      prev.map((card, i) => (i === index ? { ...card, [field]: value } : card))
+    )
+  }
 
   const handleSave = async () => {
+    setError(null)
+
     if (!title.trim()) {
-      alert('Vui lòng nhập tiêu đề học phần.')
+      setError("Vui lòng nhập tiêu đề học phần.")
       return
     }
 
     if (filledCards.length === 0) {
-      alert('Hãy thêm ít nhất một thẻ trước khi lưu.')
+      setError("Hãy thêm ít nhất 1 thẻ hợp lệ trước khi lưu.")
       return
     }
 
     setSaving(true)
-    const { data: { user } } = await supabase.auth.getUser()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
     if (!user) {
-      alert('Phiên đăng nhập đã hết. Vui lòng đăng nhập lại.')
+      setError("Phiên đăng nhập đã hết. Vui lòng đăng nhập lại.")
       setSaving(false)
       return
     }
 
-    const { data: setData, error: setError } = await supabase
-      .from('study_sets')
-      .insert([{ title, description, author_id: user.id }])
-      .select('id')
+    const { data: setData, error: createSetError } = await supabase
+      .from("study_sets")
+      .insert([
+        {
+          title: title.trim(),
+          description: description.trim(),
+          author_id: user.id,
+        },
+      ])
+      .select("id")
       .single()
 
-    if (setError || !setData) {
-      alert(setError?.message ?? 'Không thể tạo học phần.')
+    if (createSetError || !setData) {
+      setError(createSetError?.message ?? "Không thể tạo học phần.")
       setSaving(false)
       return
     }
 
     const cardsToInsert = filledCards.map((card) => ({
-      ...card,
+      term: card.term.trim(),
+      definition: card.definition.trim(),
       set_id: setData.id,
     }))
-    const { error: cardError } = await supabase.from('cards').insert(cardsToInsert)
+
+    const { error: cardError } = await supabase.from("cards").insert(cardsToInsert)
 
     if (cardError) {
-      alert(cardError.message)
+      setError(cardError.message)
       setSaving(false)
       return
     }
 
-    router.push('/dashboard')
+    router.push(`/dashboard/set/${setData.id}`)
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/30">
-      {/* Header */}
-      <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}>
-        <AppHeader pageTitle="Tao hoc phan moi" avatarUrl={avatarUrl} userName={userName} />
-      </motion.div>
-
-      {/* Progress Bar - Thanh tiến độ nhỏ */}
-      <div className="h-1 bg-slate-100">
-        <motion.div 
-          className="h-full bg-gradient-to-r from-indigo-500 to-purple-500"
-          initial={{ width: 0 }}
-          animate={{ width: `${(filledCards.length / Math.max(cards.length, 1)) * 100}%` }}
-          transition={{ duration: 0.3 }}
-        />
-      </div>
-
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Breadcrumb */}
-        <div className="flex items-center gap-2 text-sm text-slate-500 mb-6">
-          <Link href="/dashboard" className="hover:text-indigo-600 transition-colors">Dashboard</Link>
-          <span>/</span>
-          <span className="text-indigo-600 font-medium">Tạo học phần</span>
-        </div>
-
-        {/* Header với nút back */}
-        <div className="flex items-center justify-between mb-8">
-          <div className="flex items-center gap-4">
-            <Link 
-              href="/dashboard" 
-              className="p-2 hover:bg-slate-100 rounded-xl transition-colors"
+    <div className="min-h-screen bg-slate-50 dark:bg-[#0b0f17] pb-8">
+      <header className="sticky top-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-b border-slate-100 dark:border-slate-800">
+        <div className="max-w-lg mx-auto px-4">
+          <div className="h-14 flex items-center justify-between">
+            <Link
+              href="/dashboard"
+              className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-300 active:scale-95 transition"
             >
-              <ArrowLeft className="w-5 h-5 text-slate-600" />
+              <ArrowLeft className="w-4 h-4" />
             </Link>
-            <div>
-              <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-                Tạo học phần mới
-                <Sparkles className="w-5 h-5 text-yellow-500" />
-              </h1>
-              <p className="text-sm text-slate-500 mt-1">
-                Tạo bộ flashcard để bắt đầu học tập hiệu quả
-              </p>
-            </div>
-          </div>
-
-          {/* Nút lưu trên desktop */}
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="hidden md:flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-semibold rounded-xl hover:shadow-lg hover:shadow-indigo-200 transition-all disabled:opacity-50"
-          >
-            <Save className="w-4 h-4" />
-            {saving ? 'Đang lưu...' : 'Lưu học phần'}
-          </button>
-        </div>
-
-        {/* Main Form */}
-        <div className="space-y-8">
-          {/* Thông tin cơ bản */}
-          <div className="bg-white/70 backdrop-blur-sm rounded-2xl border border-slate-200 p-6 shadow-sm">
-            <h2 className="text-lg font-semibold text-slate-700 mb-4 flex items-center gap-2">
-              <BookOpen className="w-5 h-5 text-indigo-600" />
-              Thông tin cơ bản
-            </h2>
-            <div className="space-y-4">
-              <input
-                placeholder="Tiêu đề học phần (VD: IELTS 3000 từ)"
-                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-              />
-              <textarea
-                placeholder="Mô tả ngắn (tuỳ chọn)"
-                rows={3}
-                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 resize-none"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-              />
-            </div>
-          </div>
-
-          {/* Danh sách thẻ */}
-          <div className="bg-white/70 backdrop-blur-sm rounded-2xl border border-slate-200 p-6 shadow-sm">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-slate-700 flex items-center gap-2">
-                <HelpCircle className="w-5 h-5 text-indigo-600" />
-                Danh sách thẻ
-                <span className="text-sm font-normal text-slate-400 ml-2">
-                  ({filledCards.length} thẻ hợp lệ)
-                </span>
-              </h2>
-              <button
-                type="button"
-                onClick={addRow}
-                className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 transition-colors text-sm font-medium"
-              >
-                <Plus className="w-4 h-4" />
-                Thêm thẻ
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              {cards.map((card, index) => (
-                <motion.div
-                  key={index}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.05 }}
-                  className="group relative bg-white rounded-xl border border-slate-200 p-4 hover:border-indigo-200 hover:shadow-md transition-all"
-                >
-                  <div className="grid gap-4 md:grid-cols-[1fr_1fr_auto]">
-                    <div>
-                      <label className="block text-xs font-medium text-slate-400 mb-1">
-                        Thuật ngữ
-                      </label>
-                      <input
-                        placeholder="VD: Apple, Run, Beautiful..."
-                        className="w-full border-b border-slate-200 bg-transparent pb-2 text-sm outline-none focus:border-indigo-400 transition-colors"
-                        value={card.term}
-                        onChange={(e) => {
-                          const next = [...cards]
-                          next[index].term = e.target.value
-                          setCards(next)
-                        }}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-slate-400 mb-1">
-                        Định nghĩa
-                      </label>
-                      <input
-                        placeholder="VD: Quả táo, Chạy, Đẹp..."
-                        className="w-full border-b border-slate-200 bg-transparent pb-2 text-sm outline-none focus:border-indigo-400 transition-colors"
-                        value={card.definition}
-                        onChange={(e) => {
-                          const next = [...cards]
-                          next[index].definition = e.target.value
-                          setCards(next)
-                        }}
-                      />
-                    </div>
-                    <div className="flex items-end">
-                      <button
-                        type="button"
-                        onClick={() => removeRow(index)}
-                        disabled={cards.length === 1}
-                        className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all disabled:opacity-30 disabled:cursor-not-allowed"
-                      >
-                        <Trash2 className="w-5 h-5" />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Badge thứ tự */}
-                  <span className="absolute -top-2 -left-2 w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-bold border-2 border-white">
-                    {index + 1}
-                  </span>
-                </motion.div>
-              ))}
-            </div>
-
-            {/* Nút thêm thẻ ở dưới (mobile) */}
-            <button
-              type="button"
-              onClick={addRow}
-              className="mt-4 w-full py-3 border-2 border-dashed border-slate-200 rounded-xl text-slate-500 hover:border-indigo-200 hover:text-indigo-600 hover:bg-indigo-50/30 transition-all flex items-center justify-center gap-2 md:hidden"
+            <h1
+              className="text-lg font-bold tracking-tight text-slate-800 dark:text-white"
+              style={{ fontFamily: "var(--font-display, sans-serif)" }}
             >
-              <Plus className="w-4 h-4" />
-              Thêm thẻ mới
-            </button>
-          </div>
-
-          {/* Preview */}
-          {filledCards.length > 0 && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl border border-indigo-100 p-4"
-            >
-              <div className="flex items-center gap-3 text-sm">
-                <BookOpen className="w-5 h-5 text-indigo-600" />
-                <p className="text-indigo-700">
-                  ✨ Sẵn sàng lưu <span className="font-bold">{filledCards.length} thẻ</span> vào học phần
-                </p>
-              </div>
-            </motion.div>
-          )}
-
-          {/* Nút lưu cho mobile */}
-          <div className="md:hidden">
+              Tạo học phần mới
+            </h1>
             <button
               onClick={handleSave}
-              disabled={saving}
-              className="w-full py-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-semibold rounded-xl shadow-lg shadow-indigo-200 disabled:opacity-50 flex items-center justify-center gap-2"
+              disabled={saving || loading}
+              className="h-9 px-3 rounded-xl text-white text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ background: "linear-gradient(135deg, #4f46e5, #7c3aed)" }}
             >
-              <Save className="w-4 h-4" />
-              {saving ? 'Đang lưu...' : 'Lưu học phần'}
+              {saving ? "Đang lưu..." : "Lưu"}
             </button>
           </div>
+          <div className="pb-3">
+            <div className="h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: `${percent}%` }}
+                transition={{ duration: 0.2 }}
+                className="h-full bg-gradient-to-r from-indigo-500 to-violet-500"
+              />
+            </div>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1.5">
+              Hoàn thành {filledCards.length}/{cards.length} thẻ
+            </p>
+          </div>
         </div>
-      </div>
+      </header>
+
+      <main className="max-w-lg mx-auto px-4 pt-4 space-y-3">
+        {error && (
+          <div className="rounded-2xl border border-red-200 bg-red-50 dark:bg-red-900/20 dark:border-red-800 px-4 py-3 text-sm text-red-600 dark:text-red-400">
+            {error}
+          </div>
+        )}
+
+        <motion.section
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-100 dark:border-slate-800"
+        >
+          <div className="flex items-center gap-2 mb-3">
+            <BookOpen className="w-4 h-4 text-indigo-500" />
+            <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+              Thông tin học phần
+            </h2>
+          </div>
+          <div className="space-y-2.5">
+            <input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Tiêu đề (VD: IELTS 3000 từ)"
+              className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-2.5 text-sm text-slate-700 dark:text-slate-200 outline-none focus:border-indigo-400"
+            />
+            <textarea
+              rows={3}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Mô tả ngắn (tùy chọn)"
+              className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-2.5 text-sm text-slate-700 dark:text-slate-200 outline-none focus:border-indigo-400 resize-none"
+            />
+          </div>
+        </motion.section>
+
+        <motion.section
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.05 }}
+          className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-100 dark:border-slate-800"
+        >
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <HelpCircle className="w-4 h-4 text-indigo-500" />
+              <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+                Danh sách thẻ
+              </h2>
+            </div>
+            <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400">
+              {filledCards.length} hợp lệ
+            </span>
+          </div>
+
+          <div className="space-y-2.5">
+            {cards.map((card, index) => (
+              <div
+                key={index}
+                className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 p-3"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                    Thẻ {index + 1}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => removeRow(index)}
+                    disabled={cards.length === 1}
+                    className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 gap-2">
+                  <input
+                    value={card.term}
+                    onChange={(e) => updateCard(index, "term", e.target.value)}
+                    placeholder="Thuật ngữ"
+                    className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-slate-700 dark:text-slate-200 outline-none focus:border-indigo-400"
+                  />
+                  <input
+                    value={card.definition}
+                    onChange={(e) => updateCard(index, "definition", e.target.value)}
+                    placeholder="Định nghĩa"
+                    className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-slate-700 dark:text-slate-200 outline-none focus:border-indigo-400"
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <button
+            type="button"
+            onClick={addRow}
+            className="mt-3 w-full rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-700 py-2.5 text-sm font-semibold text-slate-500 dark:text-slate-300 hover:border-indigo-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition flex items-center justify-center gap-2"
+          >
+            <Plus className="w-4 h-4" />
+            Thêm thẻ mới
+          </button>
+        </motion.section>
+
+        {filledCards.length > 0 && (
+          <motion.section
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="rounded-2xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-900/20 px-4 py-3"
+          >
+            <p className="text-sm text-emerald-700 dark:text-emerald-300 flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4" />
+              Sẵn sàng lưu {filledCards.length} thẻ vào học phần.
+            </p>
+          </motion.section>
+        )}
+
+        <button
+          onClick={handleSave}
+          disabled={saving || loading}
+          className="w-full rounded-xl py-3.5 text-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          style={{ background: "linear-gradient(135deg, #4f46e5, #7c3aed)" }}
+        >
+          <Save className="w-4 h-4" />
+          {saving ? "Đang lưu học phần..." : "Lưu học phần"}
+        </button>
+      </main>
     </div>
   )
 }
-
-
-
-

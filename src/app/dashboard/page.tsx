@@ -38,6 +38,12 @@ type Group = {
   role?: string | null
 }
 
+type UserStreak = {
+  currentStreak: number
+  longestStreak: number
+  lastActivityDate: string | null
+}
+
 const SET_EMOJIS = ['📘', '🧠', '🌏', '🔬', '📖', '🎯', '💡', '🚀', '📝', '🌟']
 const GROUP_COLORS = [
   'linear-gradient(135deg, #10b981, #059669)',
@@ -66,6 +72,17 @@ function formatRelativeDate(dateStr: string) {
   if (diffDays < 7) return `${diffDays} ngày trước`
   if (diffDays < 30) return `${Math.floor(diffDays / 7)} tuần trước`
   return date.toLocaleDateString('vi-VN')
+}
+
+function startOfLocalDay(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate())
+}
+
+function getDayDifference(from: Date, to: Date) {
+  const msPerDay = 1000 * 60 * 60 * 24
+  const fromDay = startOfLocalDay(from)
+  const toDay = startOfLocalDay(to)
+  return Math.round((toDay.getTime() - fromDay.getTime()) / msPerDay)
 }
 
 // ---------- SUB-COMPONENTS ----------
@@ -245,6 +262,11 @@ export default function DashboardPage() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
+  const [userStreak, setUserStreak] = useState<UserStreak>({
+    currentStreak: 0,
+    longestStreak: 0,
+    lastActivityDate: null,
+  })
 
   useEffect(() => {
     let cancelled = false
@@ -255,6 +277,86 @@ export default function DashboardPage() {
 
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { router.push('/auth/login'); return }
+
+      const now = new Date()
+      const nowIso = now.toISOString()
+      const { data: streakRow, error: streakError } = await supabase
+        .from('UserStreaks')
+        .select('CurrentStreak, LongestStreak, LastActivityDate')
+        .eq('UserId', user.id)
+        .maybeSingle()
+
+      if (!cancelled && streakError) {
+        setError(streakError.message)
+      }
+
+      if (!streakError) {
+        if (!streakRow) {
+          const initialStreak: UserStreak = {
+            currentStreak: 1,
+            longestStreak: 1,
+            lastActivityDate: nowIso,
+          }
+          const { error: insertStreakError } = await supabase
+            .from('UserStreaks')
+            .insert({
+              UserId: user.id,
+              CurrentStreak: initialStreak.currentStreak,
+              LongestStreak: initialStreak.longestStreak,
+              LastActivityDate: initialStreak.lastActivityDate,
+              UpdatedAt: nowIso,
+            })
+
+          if (!cancelled) {
+            if (insertStreakError) {
+              setError(insertStreakError.message)
+            } else {
+              setUserStreak(initialStreak)
+            }
+          }
+        } else {
+          let nextCurrent = streakRow.CurrentStreak ?? 0
+          let nextLongest = streakRow.LongestStreak ?? 0
+          const lastActivityDate = streakRow.LastActivityDate as string | null
+          const lastActivity = lastActivityDate ? new Date(lastActivityDate) : null
+          const dayDiff = lastActivity ? getDayDifference(lastActivity, now) : 999
+          let shouldUpdate = false
+
+          if (!lastActivity || dayDiff > 1) {
+            nextCurrent = 1
+            shouldUpdate = true
+          } else if (dayDiff === 1) {
+            nextCurrent = (streakRow.CurrentStreak ?? 0) + 1
+            shouldUpdate = true
+          }
+
+          nextLongest = Math.max(nextLongest, nextCurrent)
+
+          if (shouldUpdate) {
+            const { error: updateStreakError } = await supabase
+              .from('UserStreaks')
+              .update({
+                CurrentStreak: nextCurrent,
+                LongestStreak: nextLongest,
+                LastActivityDate: nowIso,
+                UpdatedAt: nowIso,
+              })
+              .eq('UserId', user.id)
+
+            if (!cancelled && updateStreakError) {
+              setError(updateStreakError.message)
+            }
+          }
+
+          if (!cancelled) {
+            setUserStreak({
+              currentStreak: nextCurrent,
+              longestStreak: nextLongest,
+              lastActivityDate: shouldUpdate ? nowIso : lastActivityDate,
+            })
+          }
+        }
+      }
 
       const { data: profile } = await supabase
         .from('profiles')
@@ -345,7 +447,7 @@ export default function DashboardPage() {
                   WebkitTextFillColor: 'transparent',
                 }}
               >
-                Lexora
+                Chiepchiep
               </span>
 
               <div className="flex items-center gap-2">
@@ -474,7 +576,7 @@ export default function DashboardPage() {
               <Flame className="w-4 h-4 text-orange-500 flex-shrink-0" />
               <span className="text-sm text-violet-700 dark:text-violet-300 font-medium flex-1">Streak hiện tại của bạn</span>
               <span className="text-xs font-bold bg-violet-100 dark:bg-violet-900/60 text-violet-700 dark:text-violet-300 px-2.5 py-1 rounded-full">
-                7 ngày 🔥
+                {loading ? '...' : `${userStreak.currentStreak} ngày 🔥`}
               </span>
             </div>
           </motion.div>
@@ -484,11 +586,11 @@ export default function DashboardPage() {
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.05 }}
-            className="grid grid-cols-3 gap-2"
+            className="grid grid-cols-3 gap-1"
           >
             <StatCard value={loading ? '–' : allStudySets.length} label="Học phần" />
             <StatCard value={loading ? '–' : groups.length} label="Nhóm học" />
-            <StatCard value="7" label="Ngày streak" />
+            <StatCard value={loading ? '–' : userStreak.longestStreak} label="Streak dài nhất" />
           </motion.div>
 
           {/* ── CONTINUE STUDYING (nếu có set) ── */}

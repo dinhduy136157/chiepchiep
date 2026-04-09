@@ -3,19 +3,19 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
-import { motion } from 'framer-motion'
-import AppHeader from '@/components/AppHeader'
+import { motion, AnimatePresence } from 'framer-motion'
 import { resolveAvatarUrl } from '@/utils/avatar'
-import { 
-  Users, 
-  Plus, 
+import {
+  ArrowLeft,
+  Users,
+  Plus,
   ChevronRight,
-  Crown, 
-  User,
+  Crown,
+  X,
   Check,
-  X
 } from 'lucide-react'
 
+// ─── TYPES ───────────────────────────────────────────────
 type Group = {
   id: string
   name: string
@@ -29,6 +29,163 @@ type Profile = {
   avatar_url?: string | null
 }
 
+// ─── HELPERS ─────────────────────────────────────────────
+const GROUP_GRADIENTS = [
+  'linear-gradient(135deg, #10b981, #059669)',
+  'linear-gradient(135deg, #6366f1, #4f46e5)',
+  'linear-gradient(135deg, #f59e0b, #d97706)',
+  'linear-gradient(135deg, #ec4899, #db2777)',
+  'linear-gradient(135deg, #14b8a6, #0d9488)',
+  'linear-gradient(135deg, #8b5cf6, #7c3aed)',
+]
+const GROUP_EMOJIS = ['🏆', '📖', '⭐', '🎓', '🌈', '🚀']
+
+function getInitials(name: string | null) {
+  if (!name) return '?'
+  return name
+    .split(' ')
+    .map((w) => w[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase()
+}
+
+const AVATAR_COLORS = [
+  'linear-gradient(135deg, #6366f1, #a78bfa)',
+  'linear-gradient(135deg, #10b981, #059669)',
+  'linear-gradient(135deg, #f59e0b, #d97706)',
+  'linear-gradient(135deg, #ec4899, #db2777)',
+  'linear-gradient(135deg, #14b8a6, #0d9488)',
+]
+
+// ─── SUB-COMPONENTS ──────────────────────────────────────
+function GroupCard({ group, index }: { group: Group; index: number }) {
+  const gradient = GROUP_GRADIENTS[index % GROUP_GRADIENTS.length]
+  const emoji = GROUP_EMOJIS[index % GROUP_EMOJIS.length]
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: index * 0.05 }}
+    >
+      <Link href={`/dashboard/groups/${group.id}`}>
+        <div className="flex items-center gap-3 p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 active:scale-[0.98] transition-all duration-150 hover:border-indigo-200 dark:hover:border-indigo-800 group">
+          {/* Icon */}
+          <div
+            className="w-12 h-12 rounded-xl flex items-center justify-center text-xl flex-shrink-0 shadow-sm"
+            style={{ background: gradient }}
+          >
+            {emoji}
+          </div>
+
+          {/* Info */}
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-slate-800 dark:text-white truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+              {group.name}
+            </p>
+            <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5 truncate">
+              {group.description || 'Nhóm học tập · Cùng nhau tiến bộ'}
+            </p>
+          </div>
+
+          {/* Badge + arrow */}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <span
+              className={`text-[10px] font-bold px-2 py-1 rounded-full ${
+                group.role === 'owner'
+                  ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400'
+                  : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+              }`}
+            >
+              {group.role === 'owner' ? '👑 Chủ nhóm' : 'Thành viên'}
+            </span>
+            <ChevronRight className="w-4 h-4 text-slate-300 dark:text-slate-600 group-hover:text-indigo-400 group-hover:translate-x-0.5 transition-all" />
+          </div>
+        </div>
+      </Link>
+    </motion.div>
+  )
+}
+
+function MemberRow({
+  profile,
+  isCurrentUser,
+  selected,
+  onToggle,
+  colorIndex,
+}: {
+  profile: Profile
+  isCurrentUser: boolean
+  selected: boolean
+  onToggle: () => void
+  colorIndex: number
+}) {
+  const label = profile.username || 'Người dùng'
+  const initials = getInitials(profile.username)
+  const color = AVATAR_COLORS[colorIndex % AVATAR_COLORS.length]
+
+  return (
+    <button
+      onClick={onToggle}
+      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-left ${
+        selected
+          ? 'bg-indigo-50 dark:bg-indigo-950/50'
+          : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'
+      }`}
+    >
+      {/* Avatar */}
+      {profile.avatar_url ? (
+        <img
+          src={resolveAvatarUrl(profile.avatar_url)}
+          alt={label}
+          className="w-8 h-8 rounded-full object-cover flex-shrink-0"
+          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+        />
+      ) : (
+        <div
+          className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
+          style={{ background: color }}
+        >
+          {initials}
+        </div>
+      )}
+
+      {/* Name */}
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate">{label}</p>
+        {isCurrentUser && (
+          <p className="text-[10px] text-indigo-500 font-semibold">Bạn</p>
+        )}
+      </div>
+
+      {/* Checkbox */}
+      <div
+        className={`w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 border-2 transition-all ${
+          selected
+            ? 'bg-indigo-500 border-indigo-500'
+            : 'border-slate-200 dark:border-slate-700'
+        }`}
+      >
+        {selected && <Check className="w-3 h-3 text-white" />}
+      </div>
+    </button>
+  )
+}
+
+function Skeleton() {
+  return (
+    <div className="animate-pulse flex items-center gap-3 p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800">
+      <div className="w-12 h-12 rounded-xl bg-slate-100 dark:bg-slate-800 flex-shrink-0" />
+      <div className="flex-1 space-y-2">
+        <div className="h-3.5 bg-slate-100 dark:bg-slate-800 rounded w-1/2" />
+        <div className="h-3 bg-slate-100 dark:bg-slate-800 rounded w-3/4" />
+      </div>
+    </div>
+  )
+}
+
+// ─── MAIN PAGE ────────────────────────────────────────────
 export default function GroupsPage() {
   const supabase = createClient()
   const router = useRouter()
@@ -39,13 +196,12 @@ export default function GroupsPage() {
   const [profiles, setProfiles] = useState<Profile[]>([])
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([])
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
-  const [userName, setUserName] = useState<string>("Duy")
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
 
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [saving, setSaving] = useState(false)
   const [showCreateForm, setShowCreateForm] = useState(false)
+  const [formError, setFormError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -55,47 +211,26 @@ export default function GroupsPage() {
       setError(null)
 
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        router.push('/auth/login')
-        return
-      }
+      if (!user) { router.push('/auth/login'); return }
 
       if (!cancelled) setCurrentUserId(user.id)
 
-      // Lấy profile user
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('username, avatar_url')
-        .eq('id', user.id)
-        .single()
-
-      if (profile) {
-        setUserName(profile.username || user.email?.split('@')[0] || "Duy")
-        setAvatarUrl(profile.avatar_url)
-      } else if (user.email) {
-        setUserName(user.email.split('@')[0] || "Duy")
-      }
-
-      const { data: profileRows, error: profileError } = await supabase
-        .from('profiles')
-        .select('id, username, avatar_url')
-        .order('username', { ascending: true })
+      const [
+        { data: profileRows, error: profileError },
+        { data: membershipRows, error: membershipError },
+      ] = await Promise.all([
+        supabase.from('profiles').select('id, username, avatar_url').order('username', { ascending: true }),
+        supabase.from('group_members').select('group_id, role').eq('user_id', user.id),
+      ])
 
       if (!cancelled) {
         if (profileError) setError(profileError.message)
+        if (membershipError) setError(membershipError.message)
         setProfiles(profileRows ?? [])
       }
 
-      const { data: membershipRows, error: membershipError } = await supabase
-        .from('group_members')
-        .select('group_id, role')
-        .eq('user_id', user.id)
+      const groupIds = (membershipRows ?? []).map((r) => r.group_id)
 
-      if (!cancelled && membershipError) {
-        setError(membershipError.message)
-      }
-
-      const groupIds = (membershipRows ?? []).map((row) => row.group_id)
       if (groupIds.length > 0) {
         const { data: groupRows, error: groupError } = await supabase
           .from('groups')
@@ -104,14 +239,10 @@ export default function GroupsPage() {
 
         if (!cancelled) {
           if (groupError) setError(groupError.message)
-          const roleById = new Map(
-            (membershipRows ?? []).map((row) => [row.group_id, row.role])
+          const roleById = new Map((membershipRows ?? []).map((r) => [r.group_id, r.role]))
+          setGroups(
+            (groupRows ?? []).map((g) => ({ ...g, role: roleById.get(g.id) ?? null }))
           )
-          const merged = (groupRows ?? []).map((group) => ({
-            ...group,
-            role: roleById.get(group.id) ?? null,
-          }))
-          setGroups(merged)
         }
       } else if (!cancelled) {
         setGroups([])
@@ -121,69 +252,47 @@ export default function GroupsPage() {
     }
 
     load()
-    return () => {
-      cancelled = true
-    }
+    return () => { cancelled = true }
   }, [router, supabase])
 
-  const toggleUser = (userId: string) => {
+  const toggleUser = (userId: string) =>
     setSelectedUserIds((prev) =>
       prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]
     )
-  }
 
   const handleCreate = async () => {
-    if (!name.trim()) {
-      alert('Vui lòng nhập tên nhóm.')
-      return
-    }
-
+    if (!name.trim()) { setFormError('Vui lòng nhập tên nhóm.'); return }
+    setFormError(null)
     setSaving(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      alert('Phiên đăng nhập đã hết. Vui lòng đăng nhập lại.')
-      setSaving(false)
-      return
-    }
 
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) { setSaving(false); return }
+
+    // Create group
     const { data: groupData, error: groupError } = await supabase
       .from('groups')
-      .insert([{ name, description, created_by: user.id }])
+      .insert([{ name: name.trim(), description: description.trim(), created_by: user.id }])
       .select('id, name, description')
       .single()
 
     if (groupError || !groupData) {
-      alert(groupError?.message ?? 'Không thể tạo nhóm.')
+      setFormError(groupError?.message ?? 'Không thể tạo nhóm.')
       setSaving(false)
       return
     }
 
-    const { error: memberError } = await supabase
+    // Add owner
+    await supabase
       .from('group_members')
       .insert([{ group_id: groupData.id, user_id: user.id, role: 'owner' }])
 
-    if (memberError) {
-      alert(memberError.message)
-      setSaving(false)
-      return
-    }
-
+    // Add selected members
     const memberRows = selectedUserIds
-      .filter((userId) => userId !== user.id)
-      .map((userId) => ({
-        group_id: groupData.id,
-        user_id: userId,
-        role: 'member',
-      }))
+      .filter((uid) => uid !== user.id)
+      .map((uid) => ({ group_id: groupData.id, user_id: uid, role: 'member' }))
 
     if (memberRows.length > 0) {
-      const { error: extraMembersError } = await supabase
-        .from('group_members')
-        .insert(memberRows)
-
-      if (extraMembersError) {
-        alert(extraMembersError.message)
-      }
+      await supabase.from('group_members').insert(memberRows)
     }
 
     setGroups((prev) => [{ ...groupData, role: 'owner' }, ...prev])
@@ -194,252 +303,291 @@ export default function GroupsPage() {
     setShowCreateForm(false)
   }
 
+  const ownerCount = groups.filter((g) => g.role === 'owner').length
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/30">
-      {/* Header */}
-      <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}>
-        <AppHeader pageTitle="Quan ly nhom hoc tap" avatarUrl={avatarUrl} userName={userName} />
-      </motion.div>
+    <>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Sora:wght@700&display=swap');
+        body { font-family: 'DM Sans', sans-serif; }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      `}</style>
 
-      {/* Progress Bar */}
-      <div className="h-1 bg-slate-100">
-        <motion.div 
-          className="h-full bg-gradient-to-r from-indigo-500 to-purple-500"
-          initial={{ width: 0 }}
-          animate={{ width: `${(groups.length / 5) * 100}%` }}
-          transition={{ duration: 0.5 }}
-        />
-      </div>
+      <div className="min-h-screen bg-slate-50 dark:bg-[#0b0f17] pb-24">
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Breadcrumb và nút tạo nhóm */}
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-2 text-sm">
-            <Link href="/dashboard" className="text-slate-500 hover:text-indigo-600 transition-colors">
+        {/* ── HEADER ── */}
+        <header className="sticky top-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-b border-slate-100 dark:border-slate-800">
+          <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between gap-3">
+            <Link
+              href="/dashboard"
+              className="flex items-center gap-1.5 text-sm font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950 px-3 py-2 rounded-xl flex-shrink-0"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
               Dashboard
             </Link>
-            <ChevronRight className="w-3 h-3 text-slate-400" />
-            <span className="text-indigo-600 font-medium">Nhóm học tập</span>
-          </div>
 
-          <button
-            onClick={() => setShowCreateForm(true)}
-            className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-medium rounded-xl shadow-lg shadow-indigo-600/25 hover:shadow-xl transition-all duration-200 flex items-center gap-2"
-          >
-            <Plus className="w-4 h-4" />
-            <span className="hidden sm:inline">Tạo nhóm mới</span>
-            <span className="sm:hidden">Tạo</span>
-          </button>
-        </div>
-
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-slate-800 mb-2">Nhóm học tập</h1>
-          <p className="text-slate-500">
-            Tạo nhóm, chia sẻ học phần và cùng nhau giữ kỷ luật.
-          </p>
-        </div>
-
-        {error ? (
-          <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
-            ⚠️ {error}
-          </div>
-        ) : null}
-
-        <div className="grid gap-6 lg:grid-cols-[1.1fr_1.5fr]">
-          {/* Form tạo nhóm */}
-          {showCreateForm && (
-            <motion.section 
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm h-fit"
+            <h1
+              className="text-sm font-bold text-slate-700 dark:text-slate-200 truncate flex-1 text-center"
+              style={{ fontFamily: "'Sora', sans-serif" }}
             >
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-bold text-slate-800">Tạo nhóm mới</h2>
-                <button
-                  onClick={() => setShowCreateForm(false)}
-                  className="p-1 hover:bg-slate-100 rounded-lg transition-colors"
-                >
-                  <X className="w-5 h-5 text-slate-500" />
-                </button>
-              </div>
+              Nhóm học tập
+            </h1>
 
-              <div className="space-y-4">
-                <input
-                  placeholder="Tên nhóm"
-                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                />
-                <textarea
-                  placeholder="Mô tả nhóm (tuỳ chọn)"
-                  rows={3}
-                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 resize-none"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                />
-              </div>
+            <button
+              onClick={() => setShowCreateForm(true)}
+              className="w-9 h-9 rounded-full flex items-center justify-center text-white flex-shrink-0 active:scale-90 transition-transform"
+              style={{
+                background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
+                boxShadow: '0 3px 10px rgba(79,70,229,.3)',
+              }}
+            >
+              <Plus className="w-4 h-4" />
+            </button>
+          </div>
+        </header>
 
-              <div className="mt-6">
-                <p className="text-sm font-semibold text-slate-700 mb-2">Chọn thành viên</p>
-                <div className="max-h-56 space-y-2 overflow-auto rounded-xl border border-slate-200 bg-white p-3">
-                  {profiles.length === 0 ? (
-                    <p className="text-xs text-slate-500">Chưa có người dùng.</p>
-                  ) : (
-                    profiles.map((profile) => {
-                      const label = profile.username ?? 'Người dùng chưa đặt tên'
-                      const isCurrent = profile.id === currentUserId
-                      return (
-                        <label
-                          key={profile.id}
-                          className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2 text-sm hover:bg-slate-50 cursor-pointer"
-                        >
-                          <div className="flex items-center gap-3">
-                            {/* Avatar nhỏ cho member */}
-                            <div className="w-6 h-6 rounded-full bg-gradient-to-br from-indigo-100 to-purple-100 overflow-hidden">
-                              <img 
-                                src={resolveAvatarUrl(profile.avatar_url)}
-                                alt="avatar"
-                                className="w-full h-full object-cover"
-                                onError={(e) => {
-                                  (e.target as HTMLImageElement).src = "/avatars/avatar-anh-meo-cute-5.jpg"
-                                }}
-                              />
-                            </div>
-                            <div>
-                              <p className="font-medium text-slate-700">{label}</p>
-                              {isCurrent && (
-                                <p className="text-xs text-indigo-600">Bạn</p>
-                              )}
-                            </div>
-                          </div>
-                          <input
-                            type="checkbox"
-                            checked={selectedUserIds.includes(profile.id)}
-                            onChange={() => toggleUser(profile.id)}
-                            className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                          />
-                        </label>
-                      )
-                    })
-                  )}
-                </div>
-              </div>
+        <div className="max-w-lg mx-auto px-4 pt-4 space-y-3">
 
-              <button
-                onClick={handleCreate}
-                disabled={saving}
-                className="mt-6 w-full py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-medium rounded-xl hover:shadow-lg transition-all disabled:opacity-50"
-              >
-                {saving ? 'Đang tạo...' : 'Tạo nhóm'}
-              </button>
-            </motion.section>
+          {/* ── ERROR ── */}
+          {error && (
+            <div className="rounded-2xl border border-red-200 bg-red-50 dark:bg-red-900/20 dark:border-red-800 px-4 py-3 text-sm text-red-600 dark:text-red-400">
+              ⚠️ {error}
+            </div>
           )}
 
-          {/* Danh sách nhóm */}
-          <section className={showCreateForm ? "lg:col-span-1" : "lg:col-span-2"}>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                <Users className="w-5 h-5 text-indigo-600" />
-                Nhóm của bạn ({groups.length})
-              </h2>
+          {/* ── META CARD ── */}
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-100 dark:border-slate-800"
+          >
+            <h2
+              className="text-xl font-bold text-slate-800 dark:text-white mb-1"
+              style={{ fontFamily: "'Sora', sans-serif", letterSpacing: '-0.4px' }}
+            >
+              Nhóm học tập 👥
+            </h2>
+            <p className="text-sm text-slate-400 dark:text-slate-500 mb-3">
+              Tạo nhóm, chia sẻ học phần và cùng nhau tiến bộ mỗi ngày.
+            </p>
+
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { value: groups.length, label: 'Nhóm tham gia' },
+                { value: ownerCount, label: 'Chủ nhóm' },
+              ].map(({ value, label }) => (
+                <div
+                  key={label}
+                  className="bg-slate-50 dark:bg-slate-800/60 rounded-xl px-3 py-2.5 text-center"
+                >
+                  <p
+                    className="text-2xl font-bold text-indigo-600 dark:text-indigo-400"
+                    style={{ fontFamily: "'Sora', sans-serif", letterSpacing: '-1px' }}
+                  >
+                    {loading ? '–' : value}
+                  </p>
+                  <p className="text-[10px] uppercase tracking-widest text-slate-400 font-semibold mt-0.5">
+                    {label}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+
+          {/* ── CREATE FORM ── */}
+          <AnimatePresence>
+            {showCreateForm && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="overflow-hidden"
+              >
+                <div className="bg-white dark:bg-slate-900 rounded-2xl border-2 border-indigo-200 dark:border-indigo-800 p-4">
+                  {/* Form header */}
+                  <div className="flex items-center justify-between mb-4">
+                    <h3
+                      className="text-base font-bold text-slate-800 dark:text-white"
+                      style={{ fontFamily: "'Sora', sans-serif" }}
+                    >
+                      Tạo nhóm mới ✨
+                    </h3>
+                    <button
+                      onClick={() => { setShowCreateForm(false); setFormError(null) }}
+                      className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  {/* Fields */}
+                  <div className="space-y-3 mb-4">
+                    <div>
+                      <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1.5 ml-1">
+                        Tên nhóm *
+                      </label>
+                      <input
+                        autoFocus
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        placeholder="VD: IELTS Target 7.0"
+                        className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-semibold text-slate-800 dark:text-white outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-900 transition placeholder:font-normal"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-1.5 ml-1">
+                        Mô tả (tuỳ chọn)
+                      </label>
+                      <textarea
+                        value={description}
+                        onChange={(e) => setDescription(e.target.value)}
+                        placeholder="Mô tả ngắn về nhóm..."
+                        rows={2}
+                        className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-700 dark:text-white outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-900 transition resize-none"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Member selector */}
+                  <div className="mb-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 ml-1">
+                        Thêm thành viên
+                      </label>
+                      {selectedUserIds.length > 0 && (
+                        <span className="text-[10px] font-semibold text-indigo-500 bg-indigo-50 dark:bg-indigo-950 px-2 py-0.5 rounded-full">
+                          {selectedUserIds.length} đã chọn
+                        </span>
+                      )}
+                    </div>
+                    <div className="border border-slate-100 dark:border-slate-800 rounded-xl overflow-hidden max-h-44 overflow-y-auto hide-scrollbar">
+                      {profiles.length === 0 ? (
+                        <p className="text-xs text-slate-400 p-4 text-center">Chưa có người dùng nào.</p>
+                      ) : (
+                        <div className="p-2 space-y-0.5">
+                          {profiles.map((profile, i) => (
+                            <MemberRow
+                              key={profile.id}
+                              profile={profile}
+                              isCurrentUser={profile.id === currentUserId}
+                              selected={selectedUserIds.includes(profile.id)}
+                              onToggle={() => toggleUser(profile.id)}
+                              colorIndex={i}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Form error */}
+                  {formError && (
+                    <p className="text-xs text-red-500 mb-3 px-1">{formError}</p>
+                  )}
+
+                  {/* Actions */}
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => { setShowCreateForm(false); setFormError(null) }}
+                      className="flex-1 py-3 rounded-xl border border-slate-200 dark:border-slate-700 text-sm font-semibold text-slate-500 dark:text-slate-400 active:scale-95 transition-transform"
+                    >
+                      Huỷ
+                    </button>
+                    <button
+                      onClick={handleCreate}
+                      disabled={saving || !name.trim()}
+                      className="flex-[2] py-3 rounded-xl text-white text-sm font-bold disabled:opacity-50 active:scale-95 transition-all"
+                      style={{ background: 'linear-gradient(135deg, #4f46e5, #7c3aed)', boxShadow: '0 4px 14px rgba(79,70,229,.3)' }}
+                    >
+                      {saving ? 'Đang tạo...' : `Tạo nhóm ${selectedUserIds.length > 0 ? `(${selectedUserIds.length + 1} người)` : ''}`}
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* ── GROUP LIST ── */}
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 overflow-hidden">
+            <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-slate-50 dark:border-slate-800/80">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-indigo-50 dark:bg-indigo-950 flex items-center justify-center">
+                  <Users className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                </div>
+                <span
+                  className="text-sm font-bold text-slate-800 dark:text-white"
+                  style={{ fontFamily: "'Sora', sans-serif" }}
+                >
+                  Nhóm của bạn
+                  <span className="ml-1.5 text-xs font-normal text-slate-400">({groups.length})</span>
+                </span>
+              </div>
               {!showCreateForm && (
                 <button
                   onClick={() => setShowCreateForm(true)}
-                  className="text-sm text-indigo-600 hover:text-indigo-700 font-medium flex items-center gap-1 md:hidden"
+                  className="flex items-center gap-1 text-xs font-semibold text-indigo-600 dark:text-indigo-400"
                 >
-                  <Plus className="w-4 h-4" />
-                  Tạo nhóm
+                  <Plus className="w-3.5 h-3.5" /> Tạo mới
                 </button>
               )}
             </div>
 
-            <div className="space-y-3">
+            <div className="p-3 space-y-2">
               {loading ? (
-                [...Array(3)].map((_, i) => (
-                  <div key={i} className="animate-pulse bg-white rounded-xl border border-slate-200 p-5">
-                    <div className="h-5 bg-slate-200 rounded w-1/4 mb-3"></div>
-                    <div className="h-4 bg-slate-100 rounded w-2/3"></div>
-                  </div>
-                ))
+                [...Array(3)].map((_, i) => <Skeleton key={i} />)
               ) : groups.length === 0 ? (
-                <div className="bg-white/70 backdrop-blur-sm border-2 border-dashed border-slate-200 rounded-xl p-12 text-center">
-                  <Users className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                  <h3 className="font-semibold text-slate-700 mb-2">Chưa tham gia nhóm nào</h3>
-                  <p className="text-sm text-slate-400 mb-4">
-                    Tạo nhóm mới để bắt đầu học tập cùng bạn bè!
+                <div className="py-10 text-center">
+                  <div className="w-14 h-14 rounded-2xl bg-indigo-50 dark:bg-indigo-950 flex items-center justify-center mx-auto mb-3">
+                    <Users className="w-7 h-7 text-indigo-300 dark:text-indigo-600" />
+                  </div>
+                  <p className="text-sm font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                    Chưa tham gia nhóm nào
+                  </p>
+                  <p className="text-xs text-slate-400 dark:text-slate-500 mb-4 leading-relaxed">
+                    Tạo nhóm mới để học tập cùng<br />bạn bè và theo dõi tiến độ!
                   </p>
                   <button
                     onClick={() => setShowCreateForm(true)}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm"
+                    className="inline-flex items-center gap-1.5 text-sm font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950 px-4 py-2 rounded-xl"
                   >
-                    <Plus className="w-4 h-4" />
-                    Tạo nhóm mới
+                    <Plus className="w-4 h-4" /> Tạo nhóm đầu tiên
                   </button>
                 </div>
               ) : (
-                groups.map((group, index) => (
-                  <motion.div
-                    key={group.id}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.05 }}
-                  >
-                    <Link href={`/dashboard/groups/${group.id}`}>
-                      <div className="group bg-white rounded-xl border border-slate-200 p-5 hover:border-indigo-200 hover:shadow-md transition-all duration-200">
-                        <div className="flex justify-between items-start mb-2">
-                          <div className="flex items-center gap-3">
-                            {/* Avatar nhóm */}
-                            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-100 to-purple-100 flex items-center justify-center">
-                              {group.role === 'owner' ? (
-                                <Crown className="w-5 h-5 text-amber-600" />
-                              ) : (
-                                <Users className="w-5 h-5 text-indigo-600" />
-                              )}
-                            </div>
-                            <div>
-                              <h3 className="font-semibold text-slate-800 group-hover:text-indigo-600 transition-colors">
-                                {group.name}
-                              </h3>
-                              <div className="flex items-center gap-2 mt-1">
-                                <span className={`text-xs px-2 py-0.5 rounded-full ${
-                                  group.role === 'owner' 
-                                    ? 'bg-amber-50 text-amber-700' 
-                                    : 'bg-slate-100 text-slate-600'
-                                }`}>
-                                  {group.role === 'owner' ? 'Chủ nhóm' : 'Thành viên'}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                          <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 group-hover:translate-x-1 transition-all" />
-                        </div>
-                        <p className="text-sm text-slate-500 line-clamp-2 pl-12">
-                          {group.description || 'Nhóm học tập - Cùng nhau tiến bộ mỗi ngày'}
-                        </p>
-                      </div>
-                    </Link>
-                  </motion.div>
-                ))
+                <>
+                  {groups.map((group, i) => (
+                    <GroupCard key={group.id} group={group} index={i} />
+                  ))}
+                  {!showCreateForm && (
+                    <button
+                      onClick={() => setShowCreateForm(true)}
+                      className="w-full py-3.5 rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-700 text-sm font-semibold text-slate-400 dark:text-slate-500 flex items-center justify-center gap-2 hover:border-indigo-300 hover:text-indigo-400 transition-all mt-1"
+                    >
+                      <Plus className="w-4 h-4" /> Tạo nhóm mới hoặc tham gia
+                    </button>
+                  )}
+                </>
               )}
             </div>
+          </div>
 
-            {/* Nút tạo nhóm ở dưới (desktop) */}
-            {!showCreateForm && groups.length > 0 && (
-              <motion.button
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                onClick={() => setShowCreateForm(true)}
-                className="mt-4 w-full py-3 border-2 border-dashed border-slate-200 rounded-xl text-slate-500 hover:border-indigo-200 hover:text-indigo-600 hover:bg-indigo-50/30 transition-all flex items-center justify-center gap-2 text-sm"
-              >
-                <Plus className="w-4 h-4" />
-                Tạo nhóm học tập mới
-              </motion.button>
-            )}
-          </section>
+          {/* ── TIP ── */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.25 }}
+            className="flex items-center gap-3 bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-950/40 dark:to-purple-950/40 rounded-2xl border border-indigo-100 dark:border-indigo-900 px-4 py-3.5"
+          >
+            <span className="text-xl flex-shrink-0">💡</span>
+            <p className="text-sm text-indigo-800 dark:text-indigo-300">
+              <span className="font-semibold">Học nhóm hiệu quả hơn 3 lần</span> — chia sẻ học phần và thi đua streak cùng nhau!
+            </p>
+          </motion.div>
+
+          <div className="h-4" />
         </div>
       </div>
-    </div>
+    </>
   )
 }
-
