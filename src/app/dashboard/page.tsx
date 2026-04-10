@@ -5,19 +5,15 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 import { sortSetsByRecentView } from '@/utils/recentSets'
 import { motion, AnimatePresence } from 'framer-motion'
-import AppHeader from '@/components/AppHeader'
 import {
   BookOpen,
   Users,
   Plus,
   ChevronRight,
-  Crown,
-  User,
   Search,
   Home,
   Library,
   UserCircle2,
-  Zap,
   Flame,
   GraduationCap,
   X,
