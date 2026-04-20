@@ -10,7 +10,6 @@ import {
   Users,
   Plus,
   ChevronRight,
-  Crown,
   X,
   Check,
 } from 'lucide-react'
