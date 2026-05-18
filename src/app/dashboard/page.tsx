@@ -443,7 +443,7 @@ export default function DashboardPage() {
                   WebkitTextFillColor: 'transparent',
                 }}
               >
-                Chiepchiep
+                DuyVocab
               </span>
 
               <div className="flex items-center gap-2">

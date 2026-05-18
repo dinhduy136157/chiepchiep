@@ -243,8 +243,11 @@ export default function FlashcardsPage() {
       return
     }
 
+    const currentCards = (cardsRows ?? []) as Card[]
+    const currentCardIds = new Set(currentCards.map((card) => card.id))
+
     setTitle(setRow?.title ?? "")
-    setCards((cardsRows ?? []) as Card[])
+    setCards(currentCards)
 
     if (authData.user) {
       const { data: progressRows } = await supabase
@@ -254,7 +257,13 @@ export default function FlashcardsPage() {
         .eq("status", "mastered")
 
       if (progressRows) {
-        setMastered(new Set(progressRows.map((row) => row.card_id)))
+        setMastered(
+          new Set(
+            progressRows
+              .map((row) => row.card_id)
+              .filter((cardId) => currentCardIds.has(cardId))
+          )
+        )
       }
     }
 

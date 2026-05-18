@@ -246,10 +246,19 @@ export default function SetDetailPage() {
     if (setRowError) { setError(setRowError.message); setLoading(false); return }
     if (cardRowsError) { setError(cardRowsError.message); setLoading(false); return }
 
+    const currentCards = (cardRows ?? []) as Card[]
+    const currentCardIds = new Set(currentCards.map((card) => card.id))
+
     setTitle(setRow?.title ?? "")
     setDescription(setRow?.description ?? "")
-    setCards((cardRows ?? []) as Card[])
-    setMasteredIds(new Set((progressRows ?? []).map((r) => r.card_id)))
+    setCards(currentCards)
+    setMasteredIds(
+      new Set(
+        (progressRows ?? [])
+          .map((r) => r.card_id)
+          .filter((cardId) => currentCardIds.has(cardId))
+      )
+    )
     setCurrentIndex(0)
     setLoading(false)
   }, [router, setId, supabase])

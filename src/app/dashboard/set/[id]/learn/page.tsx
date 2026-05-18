@@ -3,13 +3,23 @@
 import { useEffect, useMemo, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { createClient } from "@/utils/supabase/client"
-import { ArrowLeft, CheckCircle2, Sparkles, XCircle } from "lucide-react"
+import { ArrowLeft, CheckCircle2, Shuffle, Sparkles, XCircle } from "lucide-react"
 import { motion } from "framer-motion"
 
 type Card = {
   id: number
   term: string
   definition: string
+}
+
+// Fisher-Yates shuffle — trả về mảng mới, không mutate
+function shuffleArray<T>(arr: T[]): T[] {
+  const a = [...arr]
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[a[i], a[j]] = [a[j], a[i]]
+  }
+  return a
 }
 
 export default function LearnPage() {
@@ -26,35 +36,34 @@ export default function LearnPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    let cancelled = false
+  const loadAndShuffle = async () => {
+    setLoading(true)
+    setError(null)
+    setCurrentIndex(0)
+    setUserInput("")
+    setStatus("idle")
 
-    const load = async () => {
-      setLoading(true)
-      setError(null)
+    const { data: cardRows, error: cardError } = await supabase
+      .from("cards")
+      .select("id, term, definition")
+      .eq("set_id", setId)
+      .order("id", { ascending: true })
 
-      const { data: cardRows, error: cardError } = await supabase
-        .from("cards")
-        .select("id, term, definition")
-        .eq("set_id", setId)
-        .order("id", { ascending: true })
-
-      if (cancelled) return
-      if (cardError) {
-        setError(cardError.message)
-        setLoading(false)
-        return
-      }
-
-      setCards((cardRows ?? []) as Card[])
+    if (cardError) {
+      setError(cardError.message)
       setLoading(false)
+      return
     }
 
-    load()
-    return () => {
-      cancelled = true
-    }
-  }, [setId, supabase])
+    // Xáo trộn ngay khi nhận về
+    setCards(shuffleArray((cardRows ?? []) as Card[]))
+    setLoading(false)
+  }
+
+  useEffect(() => {
+    void loadAndShuffle()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [setId])
 
   const currentCard = cards[currentIndex]
   const progress = useMemo(() => {
@@ -64,12 +73,14 @@ export default function LearnPage() {
 
   const checkAnswer = async () => {
     if (isChecking || !currentCard) return
-
     setIsChecking(true)
-    const isRight = userInput.trim().toLowerCase() === currentCard.term.trim().toLowerCase()
+
+    const isRight =
+      userInput.trim().toLowerCase() === currentCard.term.trim().toLowerCase()
 
     if (isRight) {
       setStatus("correct")
+
       const { data: authData } = await supabase.auth.getUser()
       if (authData.user) {
         await supabase.from("learning_progress").upsert(
@@ -91,6 +102,7 @@ export default function LearnPage() {
           setIsChecking(false)
           return
         }
+        // Học xong hết → về trang set
         router.push(`/dashboard/set/${setId}`)
       }, 650)
       return
@@ -100,14 +112,28 @@ export default function LearnPage() {
     setIsChecking(false)
   }
 
+  // ── Reshuffle thủ công ───────────────────────────────────
+  const handleReshuffle = () => {
+    setCards((prev) => shuffleArray(prev))
+    setCurrentIndex(0)
+    setUserInput("")
+    setStatus("idle")
+    setIsChecking(false)
+  }
+
+  // ── Loading ──────────────────────────────────────────────
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50 dark:bg-[#0b0f17] flex items-center justify-center text-slate-500 dark:text-slate-400">
-        Đang tải dữ liệu...
+      <div className="min-h-screen bg-slate-50 dark:bg-[#0b0f17] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin" />
+          <p className="text-sm text-slate-400">Đang xáo trộn bài học...</p>
+        </div>
       </div>
     )
   }
 
+  // ── Error ────────────────────────────────────────────────
   if (error) {
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-[#0b0f17] flex items-center justify-center p-6">
@@ -125,11 +151,14 @@ export default function LearnPage() {
     )
   }
 
+  // ── Empty ────────────────────────────────────────────────
   if (!currentCard) {
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-[#0b0f17] flex items-center justify-center p-6">
         <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-8 text-center">
-          <p className="text-sm text-slate-500 dark:text-slate-400">Bộ thẻ này chưa có nội dung.</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            Bộ thẻ này chưa có nội dung.
+          </p>
           <button
             onClick={() => router.push(`/dashboard/set/${setId}`)}
             className="mt-4 px-4 py-2 rounded-xl text-white text-sm font-semibold"
@@ -142,8 +171,10 @@ export default function LearnPage() {
     )
   }
 
+  // ── Main ─────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-[#0b0f17] pb-8">
+      {/* HEADER */}
       <header className="sticky top-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-b border-slate-100 dark:border-slate-800">
         <div className="max-w-lg mx-auto px-4">
           <div className="h-14 flex items-center justify-between">
@@ -153,16 +184,32 @@ export default function LearnPage() {
             >
               <ArrowLeft className="w-4 h-4" />
             </button>
+
             <h1
               className="text-lg font-bold tracking-tight text-slate-800 dark:text-white"
               style={{ fontFamily: "var(--font-display, sans-serif)" }}
             >
               Chế độ học
             </h1>
-            <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800">
-              {currentIndex + 1}/{cards.length}
+
+            <div className="flex items-center gap-1.5">
+              {/* Reshuffle button */}
+              <button
+                onClick={handleReshuffle}
+                title="Xáo trộn lại"
+                className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-500 dark:text-slate-400 active:scale-90 transition hover:text-indigo-500"
+              >
+                <Shuffle className="w-4 h-4" />
+              </button>
+
+              {/* Counter */}
+              <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 min-w-[46px] text-center">
+                {currentIndex + 1}/{cards.length}
+              </div>
             </div>
           </div>
+
+          {/* Progress bar */}
           <div className="pb-3">
             <div className="h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
               <motion.div
@@ -177,7 +224,9 @@ export default function LearnPage() {
       </header>
 
       <main className="max-w-lg mx-auto px-4 pt-4 space-y-3">
+        {/* Definition card */}
         <motion.section
+          key={currentIndex}
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-100 dark:border-slate-800"
@@ -191,7 +240,9 @@ export default function LearnPage() {
           </p>
         </motion.section>
 
+        {/* Input card */}
         <motion.section
+          key={`input-${currentIndex}`}
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.05 }}
@@ -209,20 +260,21 @@ export default function LearnPage() {
             placeholder="Nhập thuật ngữ tương ứng..."
             className={`w-full rounded-2xl border-2 px-4 py-4 text-center text-lg font-bold outline-none transition ${
               status === "correct"
-                ? "border-emerald-500 bg-emerald-50 text-emerald-700"
+                ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300"
                 : status === "wrong"
-                ? "border-rose-500 bg-rose-50 text-rose-700"
+                ? "border-rose-500 bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-300"
                 : "border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-100 focus:border-indigo-400"
             }`}
           />
 
+          {/* Hint khi sai */}
           {status === "wrong" && (
             <motion.p
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
               className="mt-3 text-center text-sm text-emerald-600 dark:text-emerald-400 font-semibold"
             >
-              Gợi ý: {currentCard.term}
+              💡 Đáp án: <span className="underline underline-offset-2">{currentCard.term}</span>
             </motion.p>
           )}
 
@@ -236,18 +288,16 @@ export default function LearnPage() {
             <button
               onClick={checkAnswer}
               disabled={isChecking || !userInput.trim()}
-              className="rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+              className="rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-50 transition-all active:scale-95"
               style={{ background: "linear-gradient(135deg, #4f46e5, #7c3aed)" }}
             >
               {status === "correct" ? (
-                <span className="inline-flex items-center gap-1.5">
-                  <CheckCircle2 className="w-4 h-4" />
-                  Chính xác
+                <span className="inline-flex items-center justify-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4" /> Chính xác!
                 </span>
               ) : status === "wrong" ? (
-                <span className="inline-flex items-center gap-1.5">
-                  <XCircle className="w-4 h-4" />
-                  Thử lại
+                <span className="inline-flex items-center justify-center gap-1.5">
+                  <XCircle className="w-4 h-4" /> Thử lại
                 </span>
               ) : (
                 "Kiểm tra"
