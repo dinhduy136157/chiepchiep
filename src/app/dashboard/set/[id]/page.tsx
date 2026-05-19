@@ -16,6 +16,7 @@ import {
   FileDown,
   FileText,
   LayoutGrid,
+  ListOrdered,
   Plus,
   Send,
   Sparkles,
@@ -30,7 +31,7 @@ type Card = {
   set_id: string
 }
 
-type Mode = "flashcards" | "learn" | "test" | "match" | "flashcards-full"
+type Mode = "flashcards" | "learn" | "test" | "match" | "arrange" | "flashcards-full"
 
 function ModeButton({
   label,
@@ -442,6 +443,7 @@ export default function SetDetailPage() {
           <ModeButton label="Thẻ" active={mode === "flashcards"} icon={<BookOpen className="w-3.5 h-3.5" />} onClick={() => openMode("flashcards")} />
           <ModeButton label="Flashcards" active={false} icon={<Sparkles className="w-3.5 h-3.5" />} onClick={() => openMode("flashcards-full")} />
           <ModeButton label="Học" active={false} icon={<Brain className="w-3.5 h-3.5" />} onClick={() => openMode("learn")} />
+          <ModeButton label="Sắp chữ" active={false} icon={<ListOrdered className="w-3.5 h-3.5" />} onClick={() => openMode("arrange")} />
           <ModeButton label="Kiểm tra" active={false} icon={<FileText className="w-3.5 h-3.5" />} onClick={() => openMode("test")} />
           <ModeButton label="Ghép cặp" active={false} icon={<LayoutGrid className="w-3.5 h-3.5" />} onClick={() => openMode("match")} />
         </div>
