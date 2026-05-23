@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/utils/supabase/client"
+import { createStudySetWithCards, requireCurrentUser } from "@/utils/supabase/domain"
 import { motion } from "framer-motion"
 import {
   ArrowLeft,
@@ -41,9 +42,7 @@ export default function CreateSetPage() {
     let cancelled = false
 
     const checkSession = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
+      const user = await requireCurrentUser(supabase).catch(() => null)
 
       if (!user) {
         router.replace("/auth/login")
@@ -98,9 +97,7 @@ export default function CreateSetPage() {
     }
 
     setSaving(true)
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+    const user = await requireCurrentUser(supabase).catch(() => null)
 
     if (!user) {
       setError("Phiên đăng nhập đã hết. Vui lòng đăng nhập lại.")
@@ -108,39 +105,18 @@ export default function CreateSetPage() {
       return
     }
 
-    const { data: setData, error: createSetError } = await supabase
-      .from("study_sets")
-      .insert([
-        {
-          title: title.trim(),
-          description: description.trim(),
-          author_id: user.id,
-        },
-      ])
-      .select("id")
-      .single()
-
-    if (createSetError || !setData) {
-      setError(createSetError?.message ?? "Không thể tạo học phần.")
+    try {
+      const setId = await createStudySetWithCards(supabase, user.id, {
+        title,
+        description,
+        cards: filledCards,
+      })
+      router.push(`/dashboard/set/${setId}`)
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Không thể tạo học phần.")
       setSaving(false)
       return
     }
-
-    const cardsToInsert = filledCards.map((card) => ({
-      term: card.term.trim(),
-      definition: card.definition.trim(),
-      set_id: setData.id,
-    }))
-
-    const { error: cardError } = await supabase.from("cards").insert(cardsToInsert)
-
-    if (cardError) {
-      setError(cardError.message)
-      setSaving(false)
-      return
-    }
-
-    router.push(`/dashboard/set/${setData.id}`)
   }
 
   return (

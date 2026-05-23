@@ -4,6 +4,13 @@ import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/utils/supabase/client"
+import {
+  deleteStudySet,
+  loadCardCountsBySet,
+  loadUserStudySets,
+  requireCurrentUser,
+  type StudySet,
+} from "@/utils/supabase/domain"
 import { motion } from "framer-motion"
 import {
   ArrowLeft,
@@ -17,17 +24,6 @@ import {
   UserCircle2,
   Users,
 } from "lucide-react"
-
-type StudySet = {
-  id: string
-  title: string
-  description: string | null
-  created_at: string
-}
-
-type CardRow = {
-  set_id: string
-}
 
 function BottomNav() {
   const items = [
@@ -77,29 +73,13 @@ export default function SetsManagementPage() {
       setLoading(true)
       setError(null)
 
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
+      const user = await requireCurrentUser(supabase).catch(() => null)
       if (!user) {
         router.replace("/auth/login")
         return
       }
 
-      const { data: setRows, error: setRowsError } = await supabase
-        .from("study_sets")
-        .select("id, title, description, created_at")
-        .eq("author_id", user.id)
-        .order("created_at", { ascending: false })
-
-      if (setRowsError) {
-        if (!cancelled) {
-          setError(setRowsError.message)
-          setLoading(false)
-        }
-        return
-      }
-
-      const safeSets = (setRows ?? []) as StudySet[]
+      const safeSets = await loadUserStudySets(supabase, user.id)
       if (!cancelled) setSets(safeSets)
 
       const setIds = safeSets.map((s) => s.id)
@@ -111,26 +91,18 @@ export default function SetsManagementPage() {
         return
       }
 
-      const { data: cardRows, error: cardError } = await supabase
-        .from("cards")
-        .select("set_id")
-        .in("set_id", setIds)
-
       if (!cancelled) {
-        if (cardError) {
-          setError(cardError.message)
-        } else {
-          const counts: Record<string, number> = {}
-          ;((cardRows ?? []) as CardRow[]).forEach((row) => {
-            counts[row.set_id] = (counts[row.set_id] ?? 0) + 1
-          })
-          setCardCountBySet(counts)
-        }
+        setCardCountBySet(await loadCardCountsBySet(supabase, setIds))
         setLoading(false)
       }
     }
 
-    load()
+    load().catch((loadError) => {
+      if (!cancelled) {
+        setError(loadError instanceof Error ? loadError.message : "Không thể tải học phần.")
+        setLoading(false)
+      }
+    })
     return () => {
       cancelled = true
     }
@@ -151,9 +123,10 @@ export default function SetsManagementPage() {
     if (!ok) return
 
     setDeletingId(setId)
-    const { error: deleteError } = await supabase.from("study_sets").delete().eq("id", setId)
-    if (deleteError) {
-      setError(deleteError.message)
+    try {
+      await deleteStudySet(supabase, setId)
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : "Không thể xóa học phần.")
       setDeletingId(null)
       return
     }
@@ -284,7 +257,7 @@ export default function SetsManagementPage() {
                       </p>
                       <div className="mt-2 text-[11px] text-slate-400 dark:text-slate-500 flex items-center gap-3">
                         <span>{cardCountBySet[setItem.id] ?? 0} thẻ</span>
-                        <span>{new Date(setItem.created_at).toLocaleDateString("vi-VN")}</span>
+                        <span>{setItem.created_at ? new Date(setItem.created_at).toLocaleDateString("vi-VN") : ""}</span>
                       </div>
                     </div>
                   </div>

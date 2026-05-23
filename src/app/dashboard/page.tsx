@@ -3,6 +3,13 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
+import {
+  loadProfile,
+  loadUserGroups,
+  loadUserStudySets,
+  recordDailyStreak,
+  requireCurrentUser,
+} from '@/utils/supabase/domain'
 import { sortSetsByRecentView } from '@/utils/recentSets'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -68,17 +75,6 @@ function formatRelativeDate(dateStr: string) {
   if (diffDays < 7) return `${diffDays} ngày trước`
   if (diffDays < 30) return `${Math.floor(diffDays / 7)} tuần trước`
   return date.toLocaleDateString('vi-VN')
-}
-
-function startOfLocalDay(date: Date) {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate())
-}
-
-function getDayDifference(from: Date, to: Date) {
-  const msPerDay = 1000 * 60 * 60 * 24
-  const fromDay = startOfLocalDay(from)
-  const toDay = startOfLocalDay(to)
-  return Math.round((toDay.getTime() - fromDay.getTime()) / msPerDay)
 }
 
 // ---------- SUB-COMPONENTS ----------
@@ -271,94 +267,19 @@ export default function DashboardPage() {
       setLoading(true)
       setError(null)
 
-      const { data: { user } } = await supabase.auth.getUser()
+      const user = await requireCurrentUser(supabase).catch(() => null)
       if (!user) { router.push('/auth/login'); return }
 
-      const now = new Date()
-      const nowIso = now.toISOString()
-      const { data: streakRow, error: streakError } = await supabase
-        .from('UserStreaks')
-        .select('CurrentStreak, LongestStreak, LastActivityDate')
-        .eq('UserId', user.id)
-        .maybeSingle()
+      const [streak, profile, allSets, userGroups] = await Promise.all([
+        recordDailyStreak(supabase, user.id),
+        loadProfile(supabase, user.id),
+        loadUserStudySets(supabase, user.id),
+        loadUserGroups(supabase, user.id),
+      ])
 
-      if (!cancelled && streakError) {
-        setError(streakError.message)
+      if (!cancelled) {
+        setUserStreak(streak)
       }
-
-      if (!streakError) {
-        if (!streakRow) {
-          const initialStreak: UserStreak = {
-            currentStreak: 1,
-            longestStreak: 1,
-            lastActivityDate: nowIso,
-          }
-          const { error: insertStreakError } = await supabase
-            .from('UserStreaks')
-            .insert({
-              UserId: user.id,
-              CurrentStreak: initialStreak.currentStreak,
-              LongestStreak: initialStreak.longestStreak,
-              LastActivityDate: initialStreak.lastActivityDate,
-              UpdatedAt: nowIso,
-            })
-
-          if (!cancelled) {
-            if (insertStreakError) {
-              setError(insertStreakError.message)
-            } else {
-              setUserStreak(initialStreak)
-            }
-          }
-        } else {
-          let nextCurrent = streakRow.CurrentStreak ?? 0
-          let nextLongest = streakRow.LongestStreak ?? 0
-          const lastActivityDate = streakRow.LastActivityDate as string | null
-          const lastActivity = lastActivityDate ? new Date(lastActivityDate) : null
-          const dayDiff = lastActivity ? getDayDifference(lastActivity, now) : 999
-          let shouldUpdate = false
-
-          if (!lastActivity || dayDiff > 1) {
-            nextCurrent = 1
-            shouldUpdate = true
-          } else if (dayDiff === 1) {
-            nextCurrent = (streakRow.CurrentStreak ?? 0) + 1
-            shouldUpdate = true
-          }
-
-          nextLongest = Math.max(nextLongest, nextCurrent)
-
-          if (shouldUpdate) {
-            const { error: updateStreakError } = await supabase
-              .from('UserStreaks')
-              .update({
-                CurrentStreak: nextCurrent,
-                LongestStreak: nextLongest,
-                LastActivityDate: nowIso,
-                UpdatedAt: nowIso,
-              })
-              .eq('UserId', user.id)
-
-            if (!cancelled && updateStreakError) {
-              setError(updateStreakError.message)
-            }
-          }
-
-          if (!cancelled) {
-            setUserStreak({
-              currentStreak: nextCurrent,
-              longestStreak: nextLongest,
-              lastActivityDate: shouldUpdate ? nowIso : lastActivityDate,
-            })
-          }
-        }
-      }
-
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('username, avatar_url')
-        .eq('id', user.id)
-        .single()
 
       if (!cancelled && profile) {
         setUserName(profile.username || user.email?.split('@')[0] || 'Duy')
@@ -367,50 +288,22 @@ export default function DashboardPage() {
         setUserName(user.email.split('@')[0] || 'Duy')
       }
 
-      const { data: allSetsRows, error: allSetsError } = await supabase
-        .from('study_sets')
-        .select('id, title, description, created_at')
-        .eq('author_id', user.id)
-        .order('created_at', { ascending: false })
-
       if (!cancelled) {
-        if (allSetsError) setError(allSetsError.message)
-        const allSets = allSetsRows ?? []
         const sortedSets = sortSetsByRecentView(allSets)
         setAllStudySets(allSets)
         setStudySets(sortedSets.slice(0, 5))
-      }
-
-      const { data: membershipRows, error: membershipError } = await supabase
-        .from('group_members')
-        .select('group_id, role')
-        .eq('user_id', user.id)
-
-      if (!cancelled && membershipError) setError(membershipError.message)
-
-      const groupIds = (membershipRows ?? []).map((row) => row.group_id)
-
-      if (groupIds.length > 0) {
-        const { data: groupRows, error: groupError } = await supabase
-          .from('groups')
-          .select('id, name, description')
-          .in('id', groupIds)
-
-        if (!cancelled) {
-          if (groupError) setError(groupError.message)
-          const roleById = new Map((membershipRows ?? []).map((row) => [row.group_id, row.role]))
-          const merged = (groupRows ?? []).map((group) => ({
-            ...group,
-            role: roleById.get(group.id) ?? null,
-          }))
-          setGroups(merged)
-        }
+        setGroups(userGroups)
       }
 
       if (!cancelled) setLoading(false)
     }
 
-    load()
+    load().catch((loadError) => {
+      if (!cancelled) {
+        setError(loadError instanceof Error ? loadError.message : 'Không thể tải dashboard.')
+        setLoading(false)
+      }
+    })
     return () => { cancelled = true }
   }, [router, supabase])
 

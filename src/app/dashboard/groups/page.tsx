@@ -3,6 +3,14 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
+import {
+  createGroupWithMembers,
+  loadUserGroups,
+  requireCurrentUser,
+  searchProfiles,
+  type Group,
+  type Profile,
+} from '@/utils/supabase/domain'
 import { motion, AnimatePresence } from 'framer-motion'
 import { resolveAvatarUrl } from '@/utils/avatar'
 import {
@@ -13,20 +21,6 @@ import {
   X,
   Check,
 } from 'lucide-react'
-
-// ─── TYPES ───────────────────────────────────────────────
-type Group = {
-  id: string
-  name: string
-  description: string | null
-  role?: string | null
-}
-
-type Profile = {
-  id: string
-  username: string | null
-  avatar_url?: string | null
-}
 
 // ─── HELPERS ─────────────────────────────────────────────
 const GROUP_GRADIENTS = [
@@ -193,6 +187,7 @@ export default function GroupsPage() {
   const [error, setError] = useState<string | null>(null)
   const [groups, setGroups] = useState<Group[]>([])
   const [profiles, setProfiles] = useState<Profile[]>([])
+  const [profileSearch, setProfileSearch] = useState('')
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([])
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
 
@@ -209,50 +204,50 @@ export default function GroupsPage() {
       setLoading(true)
       setError(null)
 
-      const { data: { user } } = await supabase.auth.getUser()
+      const user = await requireCurrentUser(supabase).catch(() => null)
       if (!user) { router.push('/auth/login'); return }
 
       if (!cancelled) setCurrentUserId(user.id)
 
-      const [
-        { data: profileRows, error: profileError },
-        { data: membershipRows, error: membershipError },
-      ] = await Promise.all([
-        supabase.from('profiles').select('id, username, avatar_url').order('username', { ascending: true }),
-        supabase.from('group_members').select('group_id, role').eq('user_id', user.id),
+      const [profileRows, groupRows] = await Promise.all([
+        searchProfiles(supabase, '', 20),
+        loadUserGroups(supabase, user.id),
       ])
 
       if (!cancelled) {
-        if (profileError) setError(profileError.message)
-        if (membershipError) setError(membershipError.message)
-        setProfiles(profileRows ?? [])
-      }
-
-      const groupIds = (membershipRows ?? []).map((r) => r.group_id)
-
-      if (groupIds.length > 0) {
-        const { data: groupRows, error: groupError } = await supabase
-          .from('groups')
-          .select('id, name, description')
-          .in('id', groupIds)
-
-        if (!cancelled) {
-          if (groupError) setError(groupError.message)
-          const roleById = new Map((membershipRows ?? []).map((r) => [r.group_id, r.role]))
-          setGroups(
-            (groupRows ?? []).map((g) => ({ ...g, role: roleById.get(g.id) ?? null }))
-          )
-        }
-      } else if (!cancelled) {
-        setGroups([])
+        setProfiles(profileRows)
+        setGroups(groupRows)
       }
 
       if (!cancelled) setLoading(false)
     }
 
-    load()
+    load().catch((loadError) => {
+      if (!cancelled) {
+        setError(loadError instanceof Error ? loadError.message : 'Không thể tải nhóm học tập.')
+        setLoading(false)
+      }
+    })
     return () => { cancelled = true }
   }, [router, supabase])
+
+  useEffect(() => {
+    let cancelled = false
+    const timer = window.setTimeout(() => {
+      void searchProfiles(supabase, profileSearch, 20)
+        .then((rows) => {
+          if (!cancelled) setProfiles(rows)
+        })
+        .catch((searchError) => {
+          if (!cancelled) setError(searchError instanceof Error ? searchError.message : 'Không thể tìm người dùng.')
+        })
+    }, 250)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [profileSearch, supabase])
 
   const toggleUser = (userId: string) =>
     setSelectedUserIds((prev) =>
@@ -264,40 +259,26 @@ export default function GroupsPage() {
     setFormError(null)
     setSaving(true)
 
-    const { data: { user } } = await supabase.auth.getUser()
+    const user = await requireCurrentUser(supabase).catch(() => null)
     if (!user) { setSaving(false); return }
 
-    // Create group
-    const { data: groupData, error: groupError } = await supabase
-      .from('groups')
-      .insert([{ name: name.trim(), description: description.trim(), created_by: user.id }])
-      .select('id, name, description')
-      .single()
-
-    if (groupError || !groupData) {
-      setFormError(groupError?.message ?? 'Không thể tạo nhóm.')
+    try {
+      const groupData = await createGroupWithMembers(supabase, {
+        ownerId: user.id,
+        name,
+        description,
+        memberIds: selectedUserIds,
+      })
+      setGroups((prev) => [groupData, ...prev])
+    } catch (createError) {
+      setFormError(createError instanceof Error ? createError.message : 'Không thể tạo nhóm.')
       setSaving(false)
       return
     }
-
-    // Add owner
-    await supabase
-      .from('group_members')
-      .insert([{ group_id: groupData.id, user_id: user.id, role: 'owner' }])
-
-    // Add selected members
-    const memberRows = selectedUserIds
-      .filter((uid) => uid !== user.id)
-      .map((uid) => ({ group_id: groupData.id, user_id: uid, role: 'member' }))
-
-    if (memberRows.length > 0) {
-      await supabase.from('group_members').insert(memberRows)
-    }
-
-    setGroups((prev) => [{ ...groupData, role: 'owner' }, ...prev])
     setName('')
     setDescription('')
     setSelectedUserIds([])
+    setProfileSearch('')
     setSaving(false)
     setShowCreateForm(false)
   }
@@ -460,6 +441,12 @@ export default function GroupsPage() {
                         </span>
                       )}
                     </div>
+                    <input
+                      value={profileSearch}
+                      onChange={(e) => setProfileSearch(e.target.value)}
+                      placeholder="Tìm username..."
+                      className="mb-2 w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-700 dark:text-white outline-none focus:border-indigo-400"
+                    />
                     <div className="border border-slate-100 dark:border-slate-800 rounded-xl overflow-hidden max-h-44 overflow-y-auto hide-scrollbar">
                       {profiles.length === 0 ? (
                         <p className="text-xs text-slate-400 p-4 text-center">Chưa có người dùng nào.</p>

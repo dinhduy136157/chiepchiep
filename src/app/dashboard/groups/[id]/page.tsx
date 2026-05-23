@@ -4,6 +4,15 @@ import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
 import { createClient } from "@/utils/supabase/client"
+import {
+  loadGroupDetail,
+  requireCurrentUser,
+  shareSetToGroup,
+  type Group,
+  type GroupMember as Member,
+  type SharedSet,
+  type StudySet,
+} from "@/utils/supabase/domain"
 import { resolveAvatarUrl } from "@/utils/avatar"
 import { motion } from "framer-motion"
 import {
@@ -15,40 +24,6 @@ import {
   Users,
   X,
 } from "lucide-react"
-
-type Group = {
-  id: string
-  name: string
-  description: string | null
-}
-
-type Member = {
-  user_id: string
-  role: string
-  profiles?: {
-    username?: string | null
-    avatar_url?: string | null
-  } | null
-}
-
-type StudySet = {
-  id: string
-  title: string
-  description: string | null
-}
-
-type SharedSetCard = {
-  id: number
-  learning_progress?: { user_id: string; status: string }[] | null
-}
-
-type SharedSet = StudySet & {
-  cards?: SharedSetCard[]
-}
-
-type SharedSetRelationRow = {
-  study_sets: SharedSet | SharedSet[] | null
-}
 
 export default function GroupDetailPage() {
   const params = useParams<{ id: string }>()
@@ -72,60 +47,30 @@ export default function GroupDetailPage() {
       setLoading(true)
       setError(null)
 
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
+      const user = await requireCurrentUser(supabase).catch(() => null)
       if (!user) {
         router.replace("/auth/login")
         return
       }
       if (!cancelled) setUserId(user.id)
 
-      const [{ data: groupData, error: groupError }, { data: memberRows, error: memberError }, { data: mySetRows, error: mySetError }, { data: sharedRows, error: sharedError }] =
-        await Promise.all([
-          supabase.from("groups").select("id, name, description").eq("id", groupId).single(),
-          supabase
-            .from("group_members")
-            .select("user_id, role, profiles:user_id ( username, avatar_url )")
-            .eq("group_id", groupId),
-          supabase.from("study_sets").select("id, title, description").eq("author_id", user.id),
-          supabase
-            .from("group_study_sets")
-            .select(
-              "study_sets ( id, title, description, cards ( id, learning_progress ( user_id, status ) ) )"
-            )
-            .eq("group_id", groupId),
-        ])
+      const detail = await loadGroupDetail(supabase, groupId, user.id)
 
       if (cancelled) return
 
-      if (groupError) setError(groupError.message)
-      if (memberError) setError(memberError.message)
-      if (mySetError) setError(mySetError.message)
-      if (sharedError) setError(sharedError.message)
-
-      setGroup(groupData ?? null)
-
-      const normalizedMembers: Member[] = (memberRows ?? []).map((member) => {
-        const profileValue = Array.isArray(member.profiles) ? member.profiles[0] : member.profiles
-        return {
-          user_id: member.user_id,
-          role: member.role,
-          profiles: profileValue ?? null,
-        }
-      })
-      setMembers(normalizedMembers)
-      setMySets((mySetRows ?? []) as StudySet[])
-
-      const normalizedSharedSets: SharedSet[] = ((sharedRows ?? []) as SharedSetRelationRow[]).flatMap((item) => {
-        if (!item.study_sets) return []
-        return Array.isArray(item.study_sets) ? item.study_sets : [item.study_sets]
-      })
-      setSharedSets(normalizedSharedSets)
+      setGroup(detail.group)
+      setMembers(detail.members)
+      setMySets(detail.mySets)
+      setSharedSets(detail.sharedSets)
       setLoading(false)
     }
 
-    load()
+    load().catch((loadError) => {
+      if (!cancelled) {
+        setError(loadError instanceof Error ? loadError.message : "Không thể tải nhóm.")
+        setLoading(false)
+      }
+    })
     return () => {
       cancelled = true
     }
@@ -135,10 +80,9 @@ export default function GroupDetailPage() {
     const selectedSet = mySets.find((set) => String(set.id) === String(setId))
     if (!selectedSet) return
 
-    const { error: insertError } = await supabase
-      .from("group_study_sets")
-      .insert([{ group_id: groupId, set_id: setId }])
-    if (insertError) {
+    try {
+      await shareSetToGroup(supabase, groupId, setId)
+    } catch {
       setError("Học phần này đã có trong nhóm hoặc không thể chia sẻ.")
       return
     }

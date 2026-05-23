@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/utils/supabase/client"
+import { loadProfile, requireCurrentUser } from "@/utils/supabase/domain"
 import { resolveAvatarUrl } from "@/utils/avatar"
 import { motion } from "framer-motion"
 import {
@@ -112,8 +113,7 @@ export default function ProfilePage() {
       setLoading(true)
       setError(null)
 
-      const { data: authData } = await supabase.auth.getUser()
-      const user = authData.user
+      const user = await requireCurrentUser(supabase).catch(() => null)
       if (!user) {
         router.replace("/auth/login")
         return
@@ -126,20 +126,18 @@ export default function ProfilePage() {
       }
 
       const [
-        { data: profile, error: profileError },
         { count: setsCount, error: setsError },
         { count: groupsCount, error: groupsError },
         { data: streak, error: streakError },
       ] = await Promise.all([
-        supabase.from("profiles").select("username, avatar_url").eq("id", user.id).maybeSingle(),
         supabase.from("study_sets").select("id", { count: "exact", head: true }).eq("author_id", user.id),
         supabase.from("group_members").select("group_id", { count: "exact", head: true }).eq("user_id", user.id),
         supabase.from("UserStreaks").select("CurrentStreak, LongestStreak").eq("UserId", user.id).maybeSingle<UserStreakRow>(),
       ])
+      const profile = await loadProfile(supabase, user.id)
 
       if (cancelled) return
 
-      if (profileError) setError(profileError.message)
       if (setsError) setError(setsError.message)
       if (groupsError) setError(groupsError.message)
       if (streakError) setError(streakError.message)
@@ -155,7 +153,12 @@ export default function ProfilePage() {
       setLoading(false)
     }
 
-    load()
+    load().catch((loadError) => {
+      if (!cancelled) {
+        setError(loadError instanceof Error ? loadError.message : "Không thể tải hồ sơ.")
+        setLoading(false)
+      }
+    })
     return () => {
       cancelled = true
     }

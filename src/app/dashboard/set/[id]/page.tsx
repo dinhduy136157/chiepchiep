@@ -4,6 +4,15 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
 import { createClient } from "@/utils/supabase/client"
+import {
+  addCardToSet,
+  bulkImportCards,
+  deleteCard,
+  loadSetDetail,
+  requireCurrentUser,
+  setLearningProgress,
+  type CardWithSetId,
+} from "@/utils/supabase/domain"
 import { markSetViewed } from "@/utils/recentSets"
 import { motion, AnimatePresence } from "framer-motion"
 import {
@@ -24,12 +33,7 @@ import {
   X,
 } from "lucide-react"
 
-type Card = {
-  id: number
-  term: string
-  definition: string
-  set_id: string
-}
+type Card = CardWithSetId
 
 type Mode = "flashcards" | "learn" | "test" | "match" | "arrange" | "flashcards-full"
 
@@ -231,69 +235,49 @@ export default function SetDetailPage() {
     setLoading(true)
     setError(null)
 
-    const { data: { user } } = await supabase.auth.getUser()
+    const user = await requireCurrentUser(supabase).catch(() => null)
     if (!user) { router.replace("/auth/login"); return }
 
-    const [
-      { data: setRow, error: setRowError },
-      { data: cardRows, error: cardRowsError },
-      { data: progressRows },
-    ] = await Promise.all([
-      supabase.from("study_sets").select("title, description").eq("id", setId).single(),
-      supabase.from("cards").select("id, term, definition, set_id").eq("set_id", setId).order("id", { ascending: true }),
-      supabase.from("learning_progress").select("card_id").eq("user_id", user.id).eq("status", "mastered"),
-    ])
-
-    if (setRowError) { setError(setRowError.message); setLoading(false); return }
-    if (cardRowsError) { setError(cardRowsError.message); setLoading(false); return }
-
-    const currentCards = (cardRows ?? []) as Card[]
-    const currentCardIds = new Set(currentCards.map((card) => card.id))
-
-    setTitle(setRow?.title ?? "")
-    setDescription(setRow?.description ?? "")
-    setCards(currentCards)
-    setMasteredIds(
-      new Set(
-        (progressRows ?? [])
-          .map((r) => r.card_id)
-          .filter((cardId) => currentCardIds.has(cardId))
-      )
-    )
+    const detail = await loadSetDetail(supabase, setId, user.id)
+    setTitle(detail.title)
+    setDescription(detail.description)
+    setCards(detail.cards)
+    setMasteredIds(detail.masteredIds)
     setCurrentIndex(0)
     setLoading(false)
   }, [router, setId, supabase])
 
-  useEffect(() => { void Promise.resolve().then(load) }, [load])
+  useEffect(() => {
+    void Promise.resolve().then(load).catch((loadError) => {
+      setError(loadError instanceof Error ? loadError.message : "Không thể tải học phần.")
+      setLoading(false)
+    })
+  }, [load])
 
   const currentCard = cards[currentIndex]
   const progress = cards.length === 0 ? 0 : Math.round((masteredIds.size / cards.length) * 100)
 
   const toggleMastered = useCallback(async (cardId: number) => {
-    const { data: { user } } = await supabase.auth.getUser()
+    const user = await requireCurrentUser(supabase).catch(() => null)
     if (!user) return
     const was = masteredIds.has(cardId)
     const next = new Set(masteredIds)
     if (was) next.delete(cardId); else next.add(cardId)
     setMasteredIds(next)
-    await supabase.from("learning_progress").upsert(
-      { user_id: user.id, card_id: cardId, status: was ? "learning" : "mastered", last_reviewed: new Date().toISOString() },
-      { onConflict: "user_id,card_id" }
-    )
+    await setLearningProgress(supabase, user.id, cardId, was ? "learning" : "mastered")
   }, [masteredIds, supabase])
 
   const addCard = async () => {
     if (!newTerm.trim() || !newDefinition.trim()) return
     setSavingCard(true)
-    const { data, error: insertError } = await supabase
-      .from("cards")
-      .insert([{ set_id: setId, term: newTerm.trim(), definition: newDefinition.trim() }])
-      .select("id, term, definition, set_id")
-    if (!insertError && data) {
-      setCards((prev) => [...prev, ...(data as Card[])])
+    try {
+      const data = await addCardToSet(supabase, setId, newTerm, newDefinition)
+      setCards((prev) => [...prev, ...data])
       setNewTerm("")
       setNewDefinition("")
       setIsAdding(false)
+    } catch (insertError) {
+      setError(insertError instanceof Error ? insertError.message : "Không thể thêm thẻ.")
     }
     setSavingCard(false)
   }
@@ -303,12 +287,8 @@ export default function SetDetailPage() {
     if (!deletingCard) return
     setDeleteLoading(true)
 
-    const { error: delError } = await supabase
-      .from("cards")
-      .delete()
-      .eq("id", deletingCard.id)
-
-    if (!delError) {
+    try {
+      await deleteCard(supabase, deletingCard.id)
       setCards((prev) => prev.filter((c) => c.id !== deletingCard.id))
 
       // Nếu đang xem thẻ đó trong flashcard → điều chỉnh index
@@ -325,6 +305,8 @@ export default function SetDetailPage() {
         next.delete(deletingCard.id)
         return next
       })
+    } catch (delError) {
+      setError(delError instanceof Error ? delError.message : "Không thể xóa thẻ.")
     }
 
     setDeleteLoading(false)
@@ -346,12 +328,13 @@ export default function SetDetailPage() {
 
     if (rows.length === 0) return
     setSavingCard(true)
-    const { data, error: importError } = await supabase
-      .from("cards").insert(rows).select("id, term, definition, set_id")
-    if (!importError && data) {
-      setCards((prev) => [...prev, ...(data as Card[])])
+    try {
+      const data = await bulkImportCards(supabase, rows)
+      setCards((prev) => [...prev, ...data])
       setBulkText("")
       setShowBulkModal(false)
+    } catch (importError) {
+      setError(importError instanceof Error ? importError.message : "Không thể nhập thẻ hàng loạt.")
     }
     setSavingCard(false)
   }
