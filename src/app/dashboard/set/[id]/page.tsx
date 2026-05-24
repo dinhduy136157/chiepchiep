@@ -77,18 +77,18 @@ function DeleteDialog({
   loading: boolean
 }) {
   return (
-    // Faux overlay (không dùng fixed để tránh iframe collapse)
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="absolute inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: "rgba(15,23,42,0.45)", backdropFilter: "blur(4px)", borderRadius: "1rem" }}
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 backdrop-blur-sm sm:items-center"
+      onClick={onCancel}
     >
       <motion.div
         initial={{ scale: 0.92, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.92, opacity: 0 }}
+        onClick={(event) => event.stopPropagation()}
         className="w-full max-w-sm bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-100 dark:border-slate-800 shadow-xl"
       >
         {/* Icon */}
@@ -547,8 +547,7 @@ export default function SetDetailPage() {
             <span className="text-xs text-slate-400">{cards.length} thẻ</span>
           </div>
 
-          {/* List — relative để DeleteDialog overlay đúng vị trí */}
-          <div className="p-3 space-y-2 relative">
+          <div className="p-3 space-y-2">
             <AnimatePresence initial={false}>
               {cards.map((card) => (
                 <VocabRow
@@ -566,21 +565,20 @@ export default function SetDetailPage() {
                 Chưa có thẻ nào.
               </p>
             )}
-
-            {/* Delete dialog — overlay trong list container */}
-            <AnimatePresence>
-              {deletingCard && (
-                <DeleteDialog
-                  card={deletingCard}
-                  loading={deleteLoading}
-                  onConfirm={confirmDelete}
-                  onCancel={() => setDeletingCard(null)}
-                />
-              )}
-            </AnimatePresence>
           </div>
         </section>
       </main>
+
+      <AnimatePresence>
+        {deletingCard && (
+          <DeleteDialog
+            card={deletingCard}
+            loading={deleteLoading}
+            onConfirm={confirmDelete}
+            onCancel={() => setDeletingCard(null)}
+          />
+        )}
+      </AnimatePresence>
 
       {/* ── BULK MODAL ── */}
       <AnimatePresence>

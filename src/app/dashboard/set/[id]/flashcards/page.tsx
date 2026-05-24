@@ -314,19 +314,26 @@ export default function FlashcardsPage() {
     }
   }, [stopSpeaking])
 
+  const unmasteredCards = useMemo(
+    () => cards.filter((card) => !mastered.has(card.id)),
+    [cards, mastered]
+  )
+
   const nextCard = useCallback(() => {
-    if (cards.length === 0) return
+    if (unmasteredCards.length === 0) return
     stopSpeaking()
-    setIndex((prev) => (prev + 1) % cards.length)
+    setIndex((prev) => (Math.min(prev, unmasteredCards.length - 1) + 1) % unmasteredCards.length)
     setFlipped(false)
-  }, [cards.length, stopSpeaking])
+  }, [stopSpeaking, unmasteredCards.length])
 
   const prevCard = useCallback(() => {
-    if (cards.length === 0) return
+    if (unmasteredCards.length === 0) return
     stopSpeaking()
-    setIndex((prev) => (prev - 1 + cards.length) % cards.length)
+    setIndex(
+      (prev) => (Math.min(prev, unmasteredCards.length - 1) - 1 + unmasteredCards.length) % unmasteredCards.length
+    )
     setFlipped(false)
-  }, [cards.length, stopSpeaking])
+  }, [stopSpeaking, unmasteredCards.length])
 
   const markMastered = useCallback(
     async (cardId: number) => {
@@ -359,22 +366,20 @@ export default function FlashcardsPage() {
 
   const handleSwipe = useCallback(
     (direction: "left" | "right") => {
-      const current = cards[index]
+      const currentIndex = Math.min(index, unmasteredCards.length - 1)
+      const current = unmasteredCards[currentIndex]
       if (!current) return
 
       if (direction === "right") {
-        if (!mastered.has(current.id)) {
-          void markMastered(current.id)
-          showToast("Tốt lắm, bạn đã thuộc thẻ này", "success")
-        } else {
-          showToast("Thẻ này đã được đánh dấu thuộc", "info")
-        }
+        void markMastered(current.id)
+        showToast("Tốt lắm, bạn đã thuộc thẻ này", "success")
+        return
       } else {
         showToast("Sẽ ôn lại thẻ này sau", "info")
       }
       nextCard()
     },
-    [cards, index, markMastered, mastered, nextCard, showToast]
+    [index, markMastered, nextCard, showToast, unmasteredCards]
   )
 
   const handleFlip = useCallback(() => {
@@ -425,8 +430,10 @@ export default function FlashcardsPage() {
     )
   }
 
-  const current = cards[index]
   const masteredPercent = Math.round((mastered.size / cards.length) * 100)
+  const remainingCount = unmasteredCards.length
+  const currentIndex = remainingCount === 0 ? 0 : Math.min(index, remainingCount - 1)
+  const current = unmasteredCards[currentIndex]
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-[#0b0f17] pb-8">
@@ -446,11 +453,13 @@ export default function FlashcardsPage() {
 
             <button
               onClick={() => {
-                setIndex(Math.floor(Math.random() * cards.length))
+                if (remainingCount === 0) return
+                setIndex(Math.floor(Math.random() * remainingCount))
                 setFlipped(false)
                 stopSpeaking()
               }}
-              className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center"
+              disabled={remainingCount === 0}
+              className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center disabled:opacity-50"
               aria-label="Xáo trộn"
             >
               <RotateCw className="w-4 h-4" />
@@ -490,9 +499,30 @@ export default function FlashcardsPage() {
       </AnimatePresence>
 
       <main className="mx-auto w-full max-w-4xl px-4 pt-4 md:px-6 md:pt-8">
+        {remainingCount === 0 ? (
+          <div className="mx-auto flex min-h-[58vh] max-w-md flex-col items-center justify-center text-center">
+            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-300">
+              <Check className="h-8 w-8" />
+            </div>
+            <h1 className="text-xl font-black text-slate-800 dark:text-white">
+              Bạn đã thuộc hết thẻ trong bộ này.
+            </h1>
+            <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+              Không còn thẻ chưa thuộc để ôn nhanh.
+            </p>
+            <button
+              onClick={() => router.push(`/dashboard/set/${setId}`)}
+              className="mt-5 rounded-2xl px-5 py-3 text-sm font-semibold text-white"
+              style={{ background: "linear-gradient(135deg, #4f46e5, #7c3aed)" }}
+            >
+              Quay lại bộ thẻ
+            </button>
+          </div>
+        ) : (
+          <>
         <div className="mb-4 flex items-center justify-between text-sm font-semibold text-slate-500 dark:text-slate-400">
           <span>
-            Thẻ {index + 1}/{cards.length}
+            Còn {remainingCount}/{cards.length} thẻ chưa thuộc
           </span>
           <span className="inline-flex items-center gap-1">
             <Check className="w-3.5 h-3.5 text-emerald-500" />
@@ -575,6 +605,8 @@ export default function FlashcardsPage() {
         <p className="mt-5 text-center text-xs text-slate-400 dark:text-slate-500">
           Vuốt phải để đánh dấu đã thuộc • Vuốt trái để ôn lại sau
         </p>
+          </>
+        )}
       </main>
     </div>
   )
