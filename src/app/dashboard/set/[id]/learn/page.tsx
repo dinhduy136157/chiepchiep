@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { createClient } from "@/utils/supabase/client"
+import { isLearnAnswerCorrect, moveCardToEnd } from "@/utils/learnQueue"
 import { ArrowLeft, CheckCircle2, Shuffle, Sparkles, XCircle } from "lucide-react"
 import { motion } from "framer-motion"
 
@@ -75,8 +76,7 @@ export default function LearnPage() {
     if (isChecking || !currentCard) return
     setIsChecking(true)
 
-    const isRight =
-      userInput.trim().toLowerCase() === currentCard.term.trim().toLowerCase()
+    const isRight = isLearnAnswerCorrect(userInput, currentCard.term)
 
     if (isRight) {
       setStatus("correct")
@@ -109,6 +109,29 @@ export default function LearnPage() {
     }
 
     setStatus("wrong")
+    setIsChecking(false)
+  }
+
+  const continueAfterWrong = async () => {
+    if (!currentCard || isChecking) return
+    setIsChecking(true)
+
+    const { data: authData } = await supabase.auth.getUser()
+    if (authData.user) {
+      await supabase.from("learning_progress").upsert(
+        {
+          user_id: authData.user.id,
+          card_id: currentCard.id,
+          status: "learning",
+          last_reviewed: new Date().toISOString(),
+        },
+        { onConflict: "user_id, card_id" }
+      )
+    }
+
+    setCards((prev) => moveCardToEnd(prev, currentIndex))
+    setUserInput("")
+    setStatus("idle")
     setIsChecking(false)
   }
 
@@ -252,10 +275,19 @@ export default function LearnPage() {
             autoFocus
             value={userInput}
             onChange={(e) => {
+              if (status === "wrong") return
               setUserInput(e.target.value)
               setStatus("idle")
             }}
-            onKeyDown={(e) => e.key === "Enter" && checkAnswer()}
+            onKeyDown={(e) => {
+              if (e.key !== "Enter") return
+              if (status === "wrong") {
+                void continueAfterWrong()
+                return
+              }
+              void checkAnswer()
+            }}
+            readOnly={status === "wrong"}
             disabled={isChecking && status === "correct"}
             placeholder="Nhập thuật ngữ tương ứng..."
             className={`w-full rounded-2xl border-2 px-4 py-4 text-center text-lg font-bold outline-none transition ${
@@ -286,8 +318,8 @@ export default function LearnPage() {
               Thoát
             </button>
             <button
-              onClick={checkAnswer}
-              disabled={isChecking || !userInput.trim()}
+              onClick={status === "wrong" ? continueAfterWrong : checkAnswer}
+              disabled={isChecking || (status !== "wrong" && !userInput.trim())}
               className="rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-50 transition-all active:scale-95"
               style={{ background: "linear-gradient(135deg, #4f46e5, #7c3aed)" }}
             >
@@ -297,7 +329,7 @@ export default function LearnPage() {
                 </span>
               ) : status === "wrong" ? (
                 <span className="inline-flex items-center justify-center gap-1.5">
-                  <XCircle className="w-4 h-4" /> Thử lại
+                  <XCircle className="w-4 h-4" /> Hỏi lại sau
                 </span>
               ) : (
                 "Kiểm tra"

@@ -6,7 +6,7 @@ import {
   checkArrangedAnswer,
   getArrangedAnswer,
   shuffleLetterTiles,
-} from "./letterArrange.js"
+} from "./letterArrange.ts"
 
 test("buildLetterTiles keeps every visible character from the term", () => {
   const tiles = buildLetterTiles("Hello world")
